@@ -23,7 +23,7 @@ from app.models.resume import Resume
 from app.models.user import User
 from app.services.job_deduper import split_fresh_and_known_jobs
 from app.services.batch_pipeline import run_batch_pipeline_background
-from app.services.resume_template import ResumeProfile, render_resume_html
+from app.services.resume_template import render_resume_html
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -47,16 +47,6 @@ def _user_profile_payload(user: User | None) -> dict[str, str | None]:
         "portfolio_url": user.portfolio_url,
         "linkedin_url": user.linkedin_url,
     }
-
-
-def _resume_profile(user: User | None) -> ResumeProfile:
-    return ResumeProfile(
-        name=(user.preferred_name or user.name) if user else None,
-        email=user.email if user else None,
-        github_url=user.github_url if user else None,
-        portfolio_url=user.portfolio_url if user else None,
-        linkedin_url=user.linkedin_url if user else None,
-    )
 
 
 class JobApplicationSummary(BaseModel):
@@ -380,7 +370,7 @@ async def discover_and_apply_for_user(
             job_ids=persisted_ids,
             user_id=payload.user_id,
             base_resume_text=resume.source_text,
-            base_resume_html=resume.source_html or render_resume_html(resume.source_text, _resume_profile(active_user)),
+            base_resume_html=resume.source_html or render_resume_html(resume.source_text),
             base_resume_id=resume.id,
             base_resume_version=resume.version,
             user_profile=_user_profile_payload(active_user),

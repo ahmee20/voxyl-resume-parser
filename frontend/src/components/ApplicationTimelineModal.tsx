@@ -20,6 +20,7 @@ import {
 interface ApplicationTimelineModalProps {
   applicationId: number | null;
   userId?: number | null;
+  onRefreshJobs?: () => void;
   onClose: () => void;
 }
 
@@ -38,6 +39,7 @@ const hasTailoredAssets = (detail: ApplicationDetail | null) =>
 export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> = ({
   applicationId,
   userId: _userId,
+  onRefreshJobs,
   onClose,
 }) => {
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
@@ -192,6 +194,19 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
+            {onRefreshJobs ? (
+              <button
+                onClick={() => {
+                  onRefreshJobs();
+                  void fetchDetail();
+                }}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+                title="Load jobs"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+                Load jobs
+              </button>
+            ) : null}
             <button
               onClick={onClose}
               className="rounded-full border border-border bg-white p-2 text-slate-500 transition hover:border-primary-200 hover:text-primary-600"
@@ -295,7 +310,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                   </span>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-sm font-semibold text-primary-600">
-                      {detail.ats_score || 85} / 100
+                      {detail.ats_score != null ? `${detail.ats_score} / 100` : 'Pending review'}
                     </span>
                     <ShieldCheck className="h-5 w-5 text-emerald-500" />
                   </div>

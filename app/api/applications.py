@@ -37,7 +37,7 @@ from app.models.job import Job
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.batch_pipeline import run_batch_pipeline_background
-from app.services.resume_template import ResumeProfile, render_resume_html
+from app.services.resume_template import render_resume_html
 
 log = structlog.get_logger(__name__)
 
@@ -106,16 +106,6 @@ def _user_profile_payload(user: User | None) -> dict[str, str | None]:
         "portfolio_url": user.portfolio_url,
         "linkedin_url": user.linkedin_url,
     }
-
-
-def _resume_profile(user: User | None) -> ResumeProfile:
-    return ResumeProfile(
-        name=(user.preferred_name or user.name) if user else None,
-        email=user.email if user else None,
-        github_url=user.github_url if user else None,
-        portfolio_url=user.portfolio_url if user else None,
-        linkedin_url=user.linkedin_url if user else None,
-    )
 
 
 def _effective_application_status(application: Application) -> str:
@@ -536,7 +526,7 @@ async def run_single_job_pipeline(
         application_id=application.id,
         user_id=resolved_user_id,
         base_resume_text=base_resume.source_text,
-        base_resume_html=base_resume.source_html or render_resume_html(base_resume.source_text, _resume_profile(active_user)),
+        base_resume_html=base_resume.source_html or render_resume_html(base_resume.source_text),
         base_resume_id=base_resume.id,
         base_resume_version=base_resume.version,
         job_id=job.id,
@@ -610,7 +600,7 @@ async def run_batch_job_pipeline(
         job_ids=payload.job_ids,
         user_id=resolved_user_id,
         base_resume_text=base_resume.source_text,
-        base_resume_html=base_resume.source_html or render_resume_html(base_resume.source_text, _resume_profile(active_user)),
+        base_resume_html=base_resume.source_html or render_resume_html(base_resume.source_text),
         base_resume_id=base_resume.id,
         base_resume_version=base_resume.version,
         user_profile=_user_profile_payload(active_user),

@@ -68,7 +68,25 @@ def run_resume_tailoring(resume_html: str, gap_analysis: str) -> str:
     if cleaned.endswith("```"):
         cleaned = cleaned[:-3]
 
-    return cleaned.strip() or resume_html
+    candidate_html = cleaned.strip()
+    if not candidate_html:
+        return resume_html
+
+    # Guard against thin or malformed generations that collapse the resume into
+    # just a header/name fragment. If the model output is too small to plausibly
+    # be a full resume, fall back to the original base HTML.
+    plain_text = re.sub(r"<[^>]+>", " ", candidate_html)
+    plain_text = re.sub(r"\s+", " ", plain_text).strip()
+    if len(plain_text.split()) < 40 or len(candidate_html) < 500:
+        log.warning(
+            "tailor_resume_output_rejected",
+            reason="output_too_short",
+            output_chars=len(candidate_html),
+            output_words=len(plain_text.split()),
+        )
+        return resume_html
+
+    return candidate_html
 
 
 def tailor_resume_node(state: GraphState) -> GraphState:

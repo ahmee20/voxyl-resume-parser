@@ -134,6 +134,7 @@ const DashboardContent: React.FC = () => {
   const [activeResume, setActiveResume] = useState<Resume | null>(null);
   const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
   const [applicationIds, setApplicationIds] = useState<number[]>([]);
+  const [applicationsRefreshToken, setApplicationsRefreshToken] = useState(0);
   const [showLatestDashboardJobs, setShowLatestDashboardJobs] = useState(false);
   const [mountedTabs, setMountedTabs] = useState<Set<'dashboard' | 'jobs' | 'applications' | 'profile'>>(
     () => new Set(['dashboard'])
@@ -208,6 +209,10 @@ const DashboardContent: React.FC = () => {
     setSelectedApplicationId(appId);
   };
 
+  const handleRefreshApplications = () => {
+    setApplicationsRefreshToken((current) => current + 1);
+  };
+
   return (
     <div className="min-h-screen text-primary-600 flex flex-col">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -279,6 +284,7 @@ const DashboardContent: React.FC = () => {
               applicationIds={applicationIds}
               userId={user?.id}
               suspendAutoRefresh={isApplicationSessionActive}
+              refreshToken={applicationsRefreshToken}
               onSelectApplication={(id) => setSelectedApplicationId(id)}
             />
           </div>
@@ -294,6 +300,7 @@ const DashboardContent: React.FC = () => {
       <ApplicationTimelineModal
         applicationId={selectedApplicationId}
         userId={user?.id}
+        onRefreshJobs={handleRefreshApplications}
         onClose={() => setSelectedApplicationId(null)}
       />
 

@@ -7,6 +7,7 @@ interface ApplicationTrackerProps {
   applicationIds: number[];
   userId?: number | null;
   suspendAutoRefresh?: boolean;
+  refreshToken?: number;
   onSelectApplication: (id: number) => void;
 }
 
@@ -14,6 +15,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   applicationIds,
   userId,
   suspendAutoRefresh = false,
+  refreshToken = 0,
   onSelectApplication,
 }) => {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -51,6 +53,13 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     }
     void loadTailoredJobs();
   }, [loadTailoredJobs, applicationIds.length, suspendAutoRefresh]);
+
+  useEffect(() => {
+    if (refreshToken === 0) {
+      return;
+    }
+    void loadTailoredJobs();
+  }, [loadTailoredJobs, refreshToken]);
 
   useEffect(() => {
     if (!userId || suspendAutoRefresh) {

@@ -30,7 +30,7 @@ from app.services.apify_scraper import scrape_jobs_from_apify
 from app.services.batch_pipeline import run_batch_pipeline
 from app.services.google_delivery import send_gmail_email
 from app.services.job_deduper import split_fresh_and_known_jobs
-from app.services.resume_template import ResumeProfile, render_resume_html
+from app.services.resume_template import render_resume_html
 from app.utils.security import decrypt_token
 
 log = structlog.get_logger(__name__)
@@ -60,16 +60,6 @@ def _user_profile_payload(user: User | None) -> dict[str, str | None]:
         "portfolio_url": user.portfolio_url,
         "linkedin_url": user.linkedin_url,
     }
-
-
-def _resume_profile(user: User | None) -> ResumeProfile:
-    return ResumeProfile(
-        name=(user.preferred_name or user.name) if user else None,
-        email=user.email if user else None,
-        github_url=user.github_url if user else None,
-        portfolio_url=user.portfolio_url if user else None,
-        linkedin_url=user.linkedin_url if user else None,
-    )
 
 
 async def _get_latest_base_resume(session, user_id: int) -> Resume | None:
@@ -126,7 +116,7 @@ async def _run_auto_cycle_for_user(user: User) -> None:
             "user_id": user.id,
             "application_id": 0,
             "resume_text": resume.source_text,
-            "resume_html": resume.source_html or render_resume_html(resume.source_text, _resume_profile(user)),
+            "resume_html": resume.source_html or render_resume_html(resume.source_text),
             "search_queries": queries,
             "preferred_countries": preferred_countries,
             "scraped_jobs": scraped_jobs,
@@ -164,7 +154,7 @@ async def _run_auto_cycle_for_user(user: User) -> None:
             job_ids=persisted_ids,
             user_id=user.id,
             base_resume_text=resume.source_text,
-            base_resume_html=resume.source_html or render_resume_html(resume.source_text, _resume_profile(user)),
+            base_resume_html=resume.source_html or render_resume_html(resume.source_text),
             base_resume_id=resume.id,
             base_resume_version=resume.version,
             send_mode="auto",

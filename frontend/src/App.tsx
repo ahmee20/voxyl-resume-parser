@@ -138,6 +138,7 @@ const DashboardContent: React.FC = () => {
   const [mountedTabs, setMountedTabs] = useState<Set<'dashboard' | 'jobs' | 'applications' | 'profile'>>(
     () => new Set(['dashboard'])
   );
+  const isApplicationSessionActive = selectedApplicationId !== null;
   const dashboardBatchKey = user?.id ? `${DASHBOARD_BATCH_KEY}.${user.id}` : null;
 
   useEffect(() => {
@@ -249,6 +250,7 @@ const DashboardContent: React.FC = () => {
               latestOnly={true}
               showLatestBatch={showLatestDashboardJobs}
               showLoadJobsButton={false}
+              suspendAutoRefresh={isApplicationSessionActive}
               onDiscoverySuccess={() => setShowLatestDashboardJobs(true)}
             />
           </div>
@@ -262,6 +264,7 @@ const DashboardContent: React.FC = () => {
               latestOnly={false}
               showLatestBatch={true}
               showLoadJobsButton={true}
+              suspendAutoRefresh={isApplicationSessionActive}
               onDiscoverySuccess={() => {
                 setShowLatestDashboardJobs(true);
                 setActiveTab('dashboard');
@@ -275,6 +278,7 @@ const DashboardContent: React.FC = () => {
             <ApplicationTracker
               applicationIds={applicationIds}
               userId={user?.id}
+              suspendAutoRefresh={isApplicationSessionActive}
               onSelectApplication={(id) => setSelectedApplicationId(id)}
             />
           </div>

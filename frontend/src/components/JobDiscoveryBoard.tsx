@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Job, Resume } from '../types/api';
 import { jobsApi, applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,7 @@ interface JobDiscoveryBoardProps {
   showLatestBatch?: boolean;
   showLoadJobsButton?: boolean;
   onDiscoverySuccess?: () => void;
+  suspendAutoRefresh?: boolean;
 }
 
 const AVAILABLE_COUNTRIES = [
@@ -59,8 +60,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   showLatestBatch = true,
   showLoadJobsButton = true,
   onDiscoverySuccess,
+  suspendAutoRefresh = false,
 }) => {
   const { user } = useAuth();
+  const suspendAutoRefreshRef = useRef(suspendAutoRefresh);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isDiscovering, setIsDiscovering] = useState<boolean>(false);
@@ -85,6 +88,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const cacheKey = latestOnly ? latestJobsCacheKey : allJobsCacheKey;
   const defaultCountries = user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : ['REMOTE', 'US'];
 
+  useEffect(() => {
+    suspendAutoRefreshRef.current = suspendAutoRefresh;
+  }, [suspendAutoRefresh]);
+
   const persistCache = (nextJobs: Job[], nextStats: typeof discoveryStats, nextCountries: string[]) => {
     sessionStorage.setItem(
       cacheKey,
@@ -100,7 +107,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const fetchJobs = async (force = false, statsOverride?: typeof discoveryStats) => {
     try {
       setIsLoading(true);
-      if (latestOnly && !showLatestBatch && !force) {
+      if ((suspendAutoRefresh && !force) || (latestOnly && !showLatestBatch && !force)) {
         setJobs([]);
         return;
       }
@@ -146,6 +153,11 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   };
 
   useEffect(() => {
+    if (suspendAutoRefresh) {
+      setIsLoading(false);
+      return;
+    }
+
     const nextCountries = user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : defaultCountries;
     setSelectedCountries(nextCountries);
 
@@ -208,21 +220,40 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     }
 
     void fetchJobs();
-  }, [cacheKey, user?.id, latestOnly, showLatestBatch]);
+  }, [cacheKey, user?.id, latestOnly, showLatestBatch, suspendAutoRefresh]);
 
   useEffect(() => {
     persistCache(jobs, discoveryStats, selectedCountries);
   }, [jobs, discoveryStats, selectedCountries, cacheKey]);
 
   const startPolling = (durationSec = 30, intervalMs = 2500) => {
+    if (suspendAutoRefreshRef.current) {
+      return;
+    }
+
     const startTime = Date.now();
     const interval = setInterval(async () => {
       if (Date.now() - startTime > durationSec * 1000) {
         clearInterval(interval);
         return;
       }
+      if (suspendAutoRefreshRef.current) {
+        clearInterval(interval);
+        return;
+      }
       await fetchJobs(true);
     }, intervalMs);
+  };
+
+  const refreshAfterTailor = async (durationSec: number, intervalMs: number) => {
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+    if (suspendAutoRefreshRef.current) {
+      return;
+    }
+
+    await fetchJobs(true);
+    startPolling(durationSec, intervalMs);
   };
 
   const toggleJobSelection = (jobId: number, e: React.MouseEvent) => {
@@ -282,8 +313,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       setIsBatchRunning(true);
       await applicationsApi.runBatch(selectedJobIds, activeResume.id, user.id);
       setSelectedJobIds([]);
-      await fetchJobs(true);
-      startPolling(180, 5000);
+      void refreshAfterTailor(180, 5000);
     } catch {
       // ignore
     } finally {
@@ -318,8 +348,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       setRunningJobId(job.id);
       const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user?.id);
       onApplicationStarted(res.application_id);
-      await fetchJobs();
-      startPolling(180, 5000);
+      void refreshAfterTailor(180, 5000);
     } catch {
       // ignore
     } finally {
@@ -374,7 +403,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           <div className="flex flex-col gap-3 lg:min-w-[240px]">
             {showLoadJobsButton && (
               <button
-                onClick={() => fetchJobs()}
+                onClick={() => fetchJobs(true)}
                 disabled={isLoading}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-white/70 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:bg-white/90 hover:text-primary-600"
                 title="Load job listings"
@@ -696,8 +725,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           onTailorStarted={(appId) => {
             setInspectingJob(null);
             onApplicationStarted(appId);
-            fetchJobs();
-            startPolling(30, 2000);
+            void refreshAfterTailor(30, 2000);
           }}
           onViewTailored={(appId) => {
             setInspectingJob(null);

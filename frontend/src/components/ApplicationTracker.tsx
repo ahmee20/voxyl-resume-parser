@@ -6,12 +6,14 @@ import { jobsApi } from '../services/api';
 interface ApplicationTrackerProps {
   applicationIds: number[];
   userId?: number | null;
+  suspendAutoRefresh?: boolean;
   onSelectApplication: (id: number) => void;
 }
 
 export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   applicationIds,
   userId,
+  suspendAutoRefresh = false,
   onSelectApplication,
 }) => {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -44,11 +46,14 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   }, [userId]);
 
   useEffect(() => {
+    if (suspendAutoRefresh) {
+      return;
+    }
     void loadTailoredJobs();
-  }, [loadTailoredJobs, applicationIds.length]);
+  }, [loadTailoredJobs, applicationIds.length, suspendAutoRefresh]);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || suspendAutoRefresh) {
       return;
     }
 
@@ -57,7 +62,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     }, 10000);
 
     return () => window.clearInterval(interval);
-  }, [userId, loadTailoredJobs]);
+  }, [userId, loadTailoredJobs, suspendAutoRefresh]);
 
   const displayedJobs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();

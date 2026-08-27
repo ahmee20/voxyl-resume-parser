@@ -22,9 +22,10 @@ Core rules:
 - Always work from the original resume/background provided. Do not carry over emphasis, phrasing, or achievements from a previous job application. Each email starts fresh, tailored only to the current JD.
 - Match the email to the JD's actual requirements. Read the JD carefully and identify 2 to 3 core skills or requirements it emphasizes. Pull only the resume points that map directly to those. Do not list every skill the candidate has.
 - If a point is not clearly supported by the resume, omit it. If you are unsure, recommend a safe change instead of inventing a fact.
+- Ignore account-holder metadata such as the signed-in user's name or email. Only use a candidate name or contact detail if it is explicitly present in the resume text itself.
 
 Structure:
-- Subject line: role title plus candidate name, kept short
+- Subject line: role title kept short. Only add the candidate name if it is explicitly present in the resume text.
 - Opening line: state the role being applied for and where it was found if known
 - Body: 2 to 3 sentences in prose, connect specific experience to the JD's top requirements, using concrete numbers or outcomes where available
 - Closing: clear call to action, like availability for a call or that the resume is attached
@@ -66,9 +67,9 @@ def run_email_drafting(
             content=(
                 f"### TARGET ROLE: {job_title} at {company}\n"
                 f"### RECRUITER NAME: {recruiter_name or 'Hiring Team'}\n"
-                f"### CANDIDATE PROFILE LINKS:\n{user_profile or {}}\n\n"
                 f"### JOB DESCRIPTION:\n{job_description}\n\n"
                 f"### CANDIDATE RESUME SUMMARY:\n{resume_text}\n\n"
+                "### IMPORTANT: Do not use account-holder name, email, or other profile metadata unless it appears in the resume text itself.\n\n"
                 "Draft the outreach email:"
             )
         ),
@@ -150,7 +151,7 @@ def draft_email_node(state: GraphState) -> GraphState:
     company = current_job.get("company", "Company")
     job_description = current_job.get("description", "")
     recruiter_name = current_job.get("recruiter_name")
-    user_profile = state.get("user_profile")
+    user_profile = {}
 
     try:
         email_draft = run_email_drafting(

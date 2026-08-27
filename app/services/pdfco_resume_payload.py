@@ -24,17 +24,18 @@ Rules:
 1. Use only information explicitly present in the resume text/HTML and profile block.
 2. If a field or section is missing, omit that key entirely.
 3. Do not invent titles, dates, employers, degrees, skills, or certifications.
-4. Recognize these section aliases and map them to the canonical key instead of skipping them:
+4. If the profile block conflicts with the resume text, the resume text wins. Do not invent the candidate's name, email, or links from account-holder data unless those details appear in the resume itself.
+5. Recognize these section aliases and map them to the canonical key instead of skipping them:
    - summary: professional summary, summary, profile, overview
    - skills: technical skills, skills, core competencies, competencies
    - experience: professional experience, work experience, industry experience, job experience, previous experience, employment history, career history
    - projects: projects, key projects, selected projects, relevant projects
    - education: education, academic background, academics
    - certifications: certifications, certifications & achievements, achievements, honors, awards
-5. Prefer concise, clean values that look natural in a resume template.
-6. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
-7. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
-8. Do not emit empty strings, empty arrays, or extra keys.
+6. Prefer concise, clean values that look natural in a resume template.
+7. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
+8. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
+9. Do not emit empty strings, empty arrays, or extra keys.
 
 Schema:
 {

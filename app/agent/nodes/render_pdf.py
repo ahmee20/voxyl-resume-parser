@@ -31,18 +31,10 @@ def render_pdf_node(state: GraphState) -> GraphState:
     template_data = state.get("resume_template_data")
 
     if not template_data:
-        user_profile = state.get("user_profile") or {}
-        profile = ResumeProfile(
-            name=user_profile.get("preferred_name") or user_profile.get("name"),
-            email=user_profile.get("email"),
-            github_url=user_profile.get("github_url"),
-            portfolio_url=user_profile.get("portfolio_url"),
-            linkedin_url=user_profile.get("linkedin_url"),
-        )
         template_data = build_pdfco_resume_template_data(
             tailored_resume_html=tailored_html,
             resume_text=state.get("resume_text", ""),
-            profile=profile,
+            profile=ResumeProfile(),
         ) or {}
 
     if not pdf_url and tailored_html:

@@ -15,7 +15,7 @@ from app.models.user import User
 from app.api.auth import get_current_user
 from app.services.resume_parser import extract_text
 from app.agent.nodes.extract_resume import generate_resume_html_skeleton
-from app.services.resume_template import ResumeProfile, render_resume_html
+from app.services.resume_template import render_resume_html
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/resumes", tags=["resumes"])
@@ -113,16 +113,7 @@ async def upload_resume(
 
     # Generate a semantic, print-friendly HTML skeleton.
     try:
-        html_skeleton = generate_resume_html_skeleton(
-            raw_text,
-            ResumeProfile(
-                name=active_user.preferred_name or active_user.name,
-                email=active_user.email,
-                github_url=active_user.github_url,
-                portfolio_url=active_user.portfolio_url,
-                linkedin_url=active_user.linkedin_url,
-            ),
-        )
+        html_skeleton = generate_resume_html_skeleton(raw_text)
     except Exception as exc:
         log.warning("resume_skeleton_generation_fallback", error=str(exc))
         html_skeleton = render_resume_html(raw_text)

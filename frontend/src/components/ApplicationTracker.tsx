@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, ChevronRight, CheckCircle2, FileText, Layers, MapPin, Search } from 'lucide-react';
 import type { Job } from '../types/api';
 import { jobsApi } from '../services/api';
@@ -21,7 +21,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   const hasTailoredAssets = (job: Job) =>
     Boolean(job.application?.tailored_html || job.application?.pdf_url || job.application?.email_draft);
 
-  const loadTailoredJobs = async () => {
+  const loadTailoredJobs = useCallback(async () => {
     if (!userId) {
       setJobs([]);
       return;
@@ -41,11 +41,23 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     void loadTailoredJobs();
-  }, [userId, applicationIds.length]);
+  }, [loadTailoredJobs, applicationIds.length]);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void loadTailoredJobs();
+    }, 10000);
+
+    return () => window.clearInterval(interval);
+  }, [userId, loadTailoredJobs]);
 
   const displayedJobs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -88,6 +100,14 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                 className="w-56 rounded-full border border-border bg-white/90 py-2.5 pl-9 pr-4 text-sm text-primary-600 outline-none transition focus:border-primary-400"
               />
             </div>
+            <button
+              type="button"
+              onClick={() => void loadTailoredJobs()}
+              disabled={isLoading}
+              className="rounded-full border border-border bg-white/90 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Load jobs
+            </button>
             <span className="rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs font-mono text-slate-500">
               {displayedJobs.length} ready
             </span>

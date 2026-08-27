@@ -105,28 +105,33 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         return;
       }
       if (latestOnly) {
-        const cachedValue = sessionStorage.getItem(cacheKey);
-        if (cachedValue) {
-          try {
-            const parsed = JSON.parse(cachedValue) as {
-              jobs?: Job[];
-              discoveryStats?: typeof discoveryStats;
-              selectedCountries?: string[];
-              cachedAt?: number;
-            };
-            if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
-              setJobs(parsed.jobs ?? []);
-              setDiscoveryStats(parsed.discoveryStats ?? null);
-              if (parsed.selectedCountries?.length) {
-                setSelectedCountries(parsed.selectedCountries.slice(0, 3));
+        if (!force) {
+          const cachedValue = sessionStorage.getItem(cacheKey);
+          if (cachedValue) {
+            try {
+              const parsed = JSON.parse(cachedValue) as {
+                jobs?: Job[];
+                discoveryStats?: typeof discoveryStats;
+                selectedCountries?: string[];
+                cachedAt?: number;
+              };
+              if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
+                setJobs(parsed.jobs ?? []);
+                setDiscoveryStats(parsed.discoveryStats ?? null);
+                if (parsed.selectedCountries?.length) {
+                  setSelectedCountries(parsed.selectedCountries.slice(0, 3));
+                }
+                return;
               }
-              return;
+            } catch {
+              sessionStorage.removeItem(cacheKey);
             }
-          } catch {
-            sessionStorage.removeItem(cacheKey);
           }
         }
-        setJobs([]);
+
+        const data = await jobsApi.listJobs(undefined, 100, 0, true, user?.id);
+        setJobs(data);
+        persistCache(data, statsOverride ?? discoveryStats, selectedCountries);
         return;
       }
       const limit = 100;
@@ -278,7 +283,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       await applicationsApi.runBatch(selectedJobIds, activeResume.id, user.id);
       setSelectedJobIds([]);
       await fetchJobs(true);
-      startPolling(45, 2500);
+      startPolling(180, 5000);
     } catch {
       // ignore
     } finally {
@@ -314,7 +319,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user?.id);
       onApplicationStarted(res.application_id);
       await fetchJobs();
-      startPolling(25, 2000);
+      startPolling(180, 5000);
     } catch {
       // ignore
     } finally {

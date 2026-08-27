@@ -311,7 +311,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     if (!activeResume) return;
     try {
       setRunningJobId(job.id);
-      const res = await applicationsApi.runSingleJob(job.id, activeResume.id);
+      const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user?.id);
       onApplicationStarted(res.application_id);
       await fetchJobs();
       startPolling(25, 2000);

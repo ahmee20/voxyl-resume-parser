@@ -131,7 +131,7 @@ export const jobsApi = {
 };
 
 export const applicationsApi = {
-  runSingleJob: async (jobId: number, resumeId?: number): Promise<{
+  runSingleJob: async (jobId: number, resumeId?: number, userId?: number): Promise<{
     application_id: number;
     status: string;
     pdf_url?: string;
@@ -140,6 +140,7 @@ export const applicationsApi = {
     const response = await apiClient.post('/applications/run-single', {
       job_id: jobId,
       resume_id: resumeId,
+      ...(userId ? { user_id: userId } : {}),
     });
     return response.data;
   },

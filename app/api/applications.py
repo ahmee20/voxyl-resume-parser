@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -421,6 +421,7 @@ async def run_pipeline_background(
 @router.post("/run-single", status_code=status.HTTP_201_CREATED)
 async def run_single_job_pipeline(
     payload: SingleJobRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
@@ -430,7 +431,7 @@ async def run_single_job_pipeline(
     Returns immediately with application_id so UI can display live progress.
     """
     # 1. Resolve active user_id
-    resolved_user_id = payload.user_id
+    resolved_user_id = payload.user_id or request.session.get("user_id")
     if not resolved_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -559,6 +560,7 @@ async def run_single_job_pipeline(
 @router.post("/run-batch", status_code=status.HTTP_202_ACCEPTED)
 async def run_batch_job_pipeline(
     payload: BatchJobRequest,
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
@@ -573,7 +575,7 @@ async def run_batch_job_pipeline(
         )
 
     # 1. Resolve active user_id
-    resolved_user_id = payload.user_id
+    resolved_user_id = payload.user_id or request.session.get("user_id")
     if not resolved_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

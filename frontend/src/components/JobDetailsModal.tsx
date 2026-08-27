@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Job, Resume } from '../types/api';
 import { applicationsApi } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
   X,
   Building2,
@@ -33,6 +34,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   onViewTailored,
 }) => {
   const [isStarting, setIsStarting] = useState(false);
+  const { user } = useAuth();
 
   if (!job) return null;
 
@@ -42,10 +44,10 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   const apollo = job.apollo_enrichment;
 
   const handleStartTailoring = async () => {
-    if (!activeResume) return;
+    if (!activeResume || !user) return;
     try {
       setIsStarting(true);
-      const res = await applicationsApi.runSingleJob(job.id, activeResume.id);
+      const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user.id);
       onTailorStarted(res.application_id);
     } catch {
       // ignore
@@ -222,7 +224,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
             ) : (
               <button
                 onClick={handleStartTailoring}
-                disabled={!activeResume || isStarting}
+                disabled={!activeResume || !user || isStarting}
                 className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[#20352e] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isStarting ? (

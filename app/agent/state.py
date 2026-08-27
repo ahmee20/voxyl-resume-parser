@@ -35,6 +35,7 @@ class GraphState(TypedDict, total=False):
 
     # ── Job discovery (scrape_jobs node) ──────────────────────────────────────
     scraped_jobs: list[dict[str, Any]]   # raw Apify result records
+    posted_within_hours: int             # discovery window for Apify scraping
 
     # ── Enrichment (enrich_jobs node) ─────────────────────────────────────────
     enriched_jobs: list[dict[str, Any]]  # scraped_jobs + Apollo data merged
@@ -53,6 +54,7 @@ class GraphState(TypedDict, total=False):
 
     # ── Resume tailoring (tailor_resume node) ─────────────────────────────────
     tailored_resume_html: str  # gap-filled HTML ready for PDF rendering
+    resume_template_data: dict[str, Any]  # structured JSON for the PDF.co resume template
     tailored_resume_id: int    # DB id of the saved tailored Resume row
 
     # ── PDF rendering (render_pdf node) ───────────────────────────────────────

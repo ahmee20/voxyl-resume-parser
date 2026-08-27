@@ -5,9 +5,9 @@ app/api/jobs.py — Job discovery and listing endpoints.
 from typing import Any, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased
 
 from app.agent.nodes.enrich_jobs import enrich_jobs_node
 from app.agent.nodes.filter_jobs import filter_relevant_node
@@ -21,10 +21,19 @@ from app.models.application import Application
 from app.models.job import Job
 from app.models.resume import Resume
 from app.models.user import User
+from app.services.job_deduper import split_fresh_and_known_jobs
 from app.services.batch_pipeline import run_batch_pipeline_background
 from app.services.resume_template import ResumeProfile, render_resume_html
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _effective_application_status(application: Application) -> str:
+    raw_status = application.status.value if hasattr(application.status, "value") else str(application.status)
+    has_assets = bool(application.tailored_html or application.rendered_pdf_url or application.email_draft)
+    if raw_status == "tailoring" and has_assets:
+        return "saved"
+    return raw_status
 
 
 def _user_profile_payload(user: User | None) -> dict[str, str | None]:
@@ -87,7 +96,39 @@ class DiscoveryRequest(BaseModel):
     target_role: Optional[str] = None
     preferred_roles: Optional[list[str]] = None
     countries: Optional[list[str]] = None
-    max_results: int = 5
+    max_results: Optional[int] = None
+
+
+def _job_to_response(job: Job, latest_app: Application | None = None) -> JobResponse:
+    app = latest_app
+    latest_app_summary = None
+    if app:
+        latest_app_summary = JobApplicationSummary(
+            id=app.id,
+            status=_effective_application_status(app),
+            applied_status=app.applied_status.value if hasattr(app.applied_status, "value") else str(app.applied_status),
+            pdf_url=app.rendered_pdf_url or app.drive_folder_url,
+            email_draft=app.email_draft,
+            tailored_html=app.tailored_html,
+            ats_score=app.ats_score,
+            gap_analysis=app.gap_analysis,
+            approval_attempts=app.approval_attempts or 1,
+        )
+
+    return JobResponse(
+        id=job.id,
+        title=job.title,
+        company=job.company,
+        url=job.url,
+        description=job.description,
+        recruiter_email=job.recruiter_email,
+        source=job.source,
+        is_qualified=job.is_qualified if job.is_qualified is not None else True,
+        match_score=job.match_score,
+        filter_reason=job.filter_reason,
+        apollo_enrichment=job.apollo_enrichment,
+        application=latest_app_summary,
+    )
 
 
 @router.get("", response_model=list[JobResponse])
@@ -118,9 +159,16 @@ async def list_jobs(
         resolved_user_id = res_user.scalar_one_or_none() or 1
 
     # 2. Build user-scoped query
+    latest_app_subquery = (
+        select(Application.job_id, func.max(Application.id).label("max_application_id"))
+        .group_by(Application.job_id)
+        .subquery()
+    )
+    latest_app_alias = aliased(Application)
     stmt = (
-        select(Job)
-        .options(selectinload(Job.applications))
+        select(Job, latest_app_alias)
+        .outerjoin(latest_app_subquery, Job.id == latest_app_subquery.c.job_id)
+        .outerjoin(latest_app_alias, latest_app_alias.id == latest_app_subquery.c.max_application_id)
         .where(Job.user_id == resolved_user_id)
     )
 
@@ -135,43 +183,11 @@ async def list_jobs(
         stmt = stmt.offset(offset).limit(limit)
 
     result = await db.execute(stmt)
-    jobs = result.scalars().all()
+    rows = result.all()
 
     response_items = []
-    for job in jobs:
-        latest_app = None
-        if job.applications:
-            # Pick the most recent application
-            sorted_apps = sorted(job.applications, key=lambda a: a.id, reverse=True)
-            a = sorted_apps[0]
-            latest_app = JobApplicationSummary(
-                id=a.id,
-                status=a.status.value if hasattr(a.status, "value") else str(a.status),
-                applied_status=a.applied_status.value if hasattr(a.applied_status, "value") else str(a.applied_status),
-                pdf_url=a.rendered_pdf_url or a.drive_folder_url,
-                email_draft=a.email_draft,
-                tailored_html=a.tailored_html,
-                ats_score=a.ats_score,
-                gap_analysis=a.gap_analysis,
-                approval_attempts=a.approval_attempts or 1,
-            )
-
-        response_items.append(
-            JobResponse(
-                id=job.id,
-                title=job.title,
-                company=job.company,
-                url=job.url,
-                description=job.description,
-                recruiter_email=job.recruiter_email,
-                source=job.source,
-                is_qualified=job.is_qualified if job.is_qualified is not None else True,
-                match_score=job.match_score,
-                filter_reason=job.filter_reason,
-                apollo_enrichment=job.apollo_enrichment,
-                application=latest_app,
-            )
-        )
+    for job, latest_app in rows:
+        response_items.append(_job_to_response(job, latest_app))
 
     return response_items
 
@@ -220,7 +236,8 @@ async def discover_jobs_for_user(
         "resume_text": resume.source_text,
         "search_queries": queries,
         "preferred_countries": countries,
-        "max_results": payload.max_results,
+        "max_results": None,
+        "posted_within_hours": 24,
     }
 
     # Only invoke the planner if the user did not provide preferred roles.
@@ -231,26 +248,44 @@ async def discover_jobs_for_user(
     # 1. Scrape jobs
     state = scrape_jobs_node(state)
 
-    # 2. Apollo enrichment branch across all scraped jobs
+    # 2. Drop jobs already discovered for this user before we spend more time on them
+    fresh_jobs, duplicate_jobs = await split_fresh_and_known_jobs(db, payload.user_id, state.get("scraped_jobs", []))
+    state["scraped_jobs"] = fresh_jobs
+    state["duplicate_jobs"] = duplicate_jobs
+    state["duplicate_job_ids"] = []
+
+    # 3. Apollo enrichment branch across only fresh jobs
     state = enrich_jobs_node(state)
 
-    # 3. Clean and filter basic formatting
+    # 4. Clean and filter basic formatting
     state = filter_relevant_node(state)
 
-    # 4. Persist all discovered jobs with deduplication
+    # 5. Persist all discovered jobs with deduplication
     state = persist_jobs_node(state)
 
     persisted_ids = state.get("persisted_job_ids", [])
+    fresh_count = len(fresh_jobs)
     relevant_count = len(state.get("relevant_jobs", []))
+    fresh_jobs: list[JobResponse] = []
+    if persisted_ids:
+        stmt_jobs = (
+            select(Job)
+            .where(Job.user_id == payload.user_id, Job.id.in_(persisted_ids))
+            .order_by(Job.id.desc())
+        )
+        jobs_res = await db.execute(stmt_jobs)
+        fresh_jobs = [_job_to_response(job) for job in jobs_res.scalars().all()]
 
     return {
         "status": "discovery_complete",
         "search_queries": state.get("search_queries"),
         "preferred_roles": queries,
         "preferred_countries": countries,
-        "scraped_count": relevant_count,
+        "scraped_count": fresh_count,
         "relevant_count": relevant_count,
         "persisted_job_ids": persisted_ids,
+        "duplicate_count": len(duplicate_jobs),
+        "jobs": fresh_jobs,
     }
 
 
@@ -263,7 +298,7 @@ async def discover_and_apply_for_user(
     """
     Trigger the end-to-end autonomous discovery and tailoring pipeline:
     1. Extract search queries / role from user parameters or resume
-    2. Scrape matching jobs via Apify (up to payload.max_results)
+    2. Scrape matching jobs via Apify from the last 3 hours with no item cap
     3. Apollo enrichment branch across all scraped jobs
     4. Clean, filter, and persist all discovered jobs
     5. Launch batch-parallel tailoring pipeline in background:
@@ -306,7 +341,8 @@ async def discover_and_apply_for_user(
         "resume_text": resume.source_text,
         "search_queries": queries,
         "preferred_countries": countries,
-        "max_results": payload.max_results,
+        "max_results": None,
+        "posted_within_hours": 3,
     }
 
     # Only invoke the planner if the user did not provide preferred roles.
@@ -317,16 +353,23 @@ async def discover_and_apply_for_user(
     # 1. Scrape jobs
     state = scrape_jobs_node(state)
 
-    # 2. Apollo enrichment branch across all scraped jobs
+    # 2. Drop jobs already discovered for this user before we spend more time on them
+    fresh_jobs, duplicate_jobs = await split_fresh_and_known_jobs(db, payload.user_id, state.get("scraped_jobs", []))
+    state["scraped_jobs"] = fresh_jobs
+    state["duplicate_jobs"] = duplicate_jobs
+    state["duplicate_job_ids"] = []
+
+    # 3. Apollo enrichment branch across only fresh jobs
     state = enrich_jobs_node(state)
 
-    # 3. Clean and filter basic formatting
+    # 4. Clean and filter basic formatting
     state = filter_relevant_node(state)
 
-    # 4. Persist all discovered jobs with deduplication
+    # 5. Persist all discovered jobs with deduplication
     state = persist_jobs_node(state)
 
     persisted_ids = state.get("persisted_job_ids", [])
+    fresh_count = len(fresh_jobs)
     relevant_count = len(state.get("relevant_jobs", []))
 
     # 5. Launch batch-parallel tailoring for all discovered jobs in background
@@ -350,8 +393,9 @@ async def discover_and_apply_for_user(
         "search_queries": state.get("search_queries"),
         "preferred_roles": queries,
         "preferred_countries": countries,
-        "scraped_count": relevant_count,
+        "scraped_count": fresh_count,
         "persisted_job_ids": persisted_ids,
+        "duplicate_count": len(duplicate_jobs),
         "batch_size": batch_size,
         "total_batches": total_batches,
         "message": f"Tailoring pipeline launched for {len(persisted_ids)} jobs in {total_batches} parallel batch(es) of up to {batch_size}.",

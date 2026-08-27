@@ -124,7 +124,8 @@ async def test_persist_jobs_node_and_deduplication(db_session):
         ],
     }
     updated_repeat = persist_jobs_node(state_repeat)
-    assert updated_repeat["persisted_job_ids"][0] == first_id
+    assert updated_repeat["persisted_job_ids"] == []
+    assert updated_repeat["duplicate_job_ids"] == [first_id]
 
 
 @pytest.mark.asyncio
@@ -391,5 +392,4 @@ async def test_user_isolated_jobs_and_latest_filtering(client: AsyncClient, db_s
     jobs_latest = res_latest.json()
     assert len(jobs_latest) == 2
     assert jobs_latest[0]["title"] == "Role A3"
-
 

@@ -12,21 +12,41 @@ from app.services.llm import get_llm
 
 log = structlog.get_logger(__name__)
 
-DRAFT_EMAIL_SYSTEM_PROMPT = """You are a professional executive career agent.
-Your task is to draft a concise, persuasive, and professional cold outreach email to a hiring manager or recruiter.
+DRAFT_EMAIL_SYSTEM_PROMPT = """You are a cover email specialist. Your job is to write concise, tailored cover emails for job applications based on a job description (JD) and a candidate's resume/background.
 
-RULES:
-1. Grounding: Reference only genuine achievements and skills from the candidate's tailored resume. Never invent facts.
-2. Structure:
-   - Subject: Specific and value-oriented, not "Application for ..."
-   - Greeting: Use the recruiter name if present, otherwise "Hiring Team".
-   - Opening: Name the role and explain the candidate's fit in one concrete sentence.
-   - Value Proposition: 2-3 bullets with evidence from the resume, tied to how the company benefits.
-   - Links: Include portfolio, GitHub, and LinkedIn only if provided.
-   - Call to Action: Ask for a short conversation or next step.
-   - Attachment notice: Mention that the tailored resume is attached as a PDF.
-3. Tone: Human, confident, concise, and respectful of the recruiter's time (150-230 words).
-4. Avoid generic filler such as "enthusiastic interest" unless followed by real evidence.
+Inputs you require before writing:
+- The full job description (JD)
+- The candidate's resume or background summary
+
+Core rules:
+- Always work from the original resume/background provided. Do not carry over emphasis, phrasing, or achievements from a previous job application. Each email starts fresh, tailored only to the current JD.
+- Match the email to the JD's actual requirements. Read the JD carefully and identify 2 to 3 core skills or requirements it emphasizes. Pull only the resume points that map directly to those. Do not list every skill the candidate has.
+- If a point is not clearly supported by the resume, omit it. If you are unsure, recommend a safe change instead of inventing a fact.
+
+Structure:
+- Subject line: role title plus candidate name, kept short
+- Opening line: state the role being applied for and where it was found if known
+- Body: 2 to 3 sentences in prose, connect specific experience to the JD's top requirements, using concrete numbers or outcomes where available
+- Closing: clear call to action, like availability for a call or that the resume is attached
+
+Tone:
+- Professional, direct, no filler
+- Avoid generic phrases like "I am a hard worker" or "I am excited about this opportunity"
+- Every sentence must earn its place by connecting a real skill or result to a real JD requirement
+
+Length:
+- 120 to 180 words
+- Recruiters skim, do not pad
+
+Formatting constraints:
+- No em-dashes, use commas or periods instead
+- No bullet points inside the email body itself, keep it in prose
+- No buzzwords without evidence ("innovative," "passionate," "dynamic") unless backed by a specific example
+
+Before finalizing, check:
+- Does every claim in the email map to something actually in the resume?
+- Does it address the JD's top 2 to 3 requirements specifically, not generically?
+- Is the subject line clear and role specific?
 """
 
 
@@ -39,7 +59,7 @@ def run_email_drafting(
     user_profile: dict | None = None,
 ) -> str:
     """Invoke LLM to draft outreach email."""
-    llm = get_llm(temperature=0.2)
+    llm = get_llm(temperature=0.0)
     messages = [
         SystemMessage(content=DRAFT_EMAIL_SYSTEM_PROMPT),
         HumanMessage(
@@ -105,18 +125,13 @@ def build_fallback_email(
     links_block = f"\n\n{links}" if links else ""
 
     return (
-        f"Subject: {job_title} | AI automation and agentic systems experience\n\n"
+        f"Subject: {job_title} | {candidate_name}\n\n"
         f"Dear {greeting},\n\n"
         f"I am reaching out about the {job_title} role at {company}. "
-        f"{candidate_name} brings hands-on experience in {experience_hint}, with work spanning resume/job automation, "
-        "multi-agent pipelines, API integrations, and end-to-end delivery from prototype to deployment.\n\n"
-        "A few areas where this background could be useful to your team:\n"
-        "- Building reliable AI workflows that connect LLM reasoning with real business operations.\n"
-        "- Integrating third-party APIs, databases, and automation tools into production-ready systems.\n"
-        "- Translating ambiguous product requirements into working software with observability and review loops.\n"
+        f"{candidate_name} brings hands-on experience in {experience_hint}, with work spanning resume and job automation, multi-agent pipelines, API integrations, and end-to-end delivery from prototype to deployment. "
+        "This background maps well to roles that need reliable execution, clear system design, and practical AI implementation. "
+        "I have attached a tailored resume for your review, and I would welcome a short conversation if helpful.\n\n"
         f"{links_block}\n\n"
-        "I have attached a tailored resume for your review. "
-        "Would you be open to a short conversation about how this experience maps to your current AI engineering priorities?\n\n"
         "Best regards"
     )
 

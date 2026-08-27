@@ -23,6 +23,18 @@ from app.config import settings
 log = structlog.get_logger(__name__)
 
 
+def _build_ollama_llm(model: str | None, temperature: float) -> BaseChatModel:
+    from langchain_ollama import ChatOllama
+
+    chosen_model = model or settings.ollama_model
+    log.info("llm_init", provider="ollama", model=chosen_model, base_url=settings.ollama_base_url)
+    return ChatOllama(
+        model=chosen_model,
+        base_url=settings.ollama_base_url,
+        temperature=temperature,
+    )
+
+
 def get_llm(
     provider: str | None = None,
     model: str | None = None,
@@ -37,36 +49,23 @@ def get_llm(
     selected_provider = (provider or settings.llm_provider).lower()
 
     if selected_provider == "groq":
-        from langchain_groq import ChatGroq
-
         chosen_model = model or settings.groq_model
-        log.info("llm_init", provider="groq", model=chosen_model)
-
         groq_api_key = settings.groq_api_key.strip() if settings.groq_api_key else ""
 
-        # Build fallback model (Ollama)
+        from langchain_groq import ChatGroq
+
+        log.info("llm_init", provider="groq", model=chosen_model)
+
         fallback_llm = None
         if enable_fallback:
             try:
-                from langchain_ollama import ChatOllama
-                fallback_llm = ChatOllama(
-                    model=settings.ollama_model,
-                    base_url=settings.ollama_base_url,
-                    temperature=temperature,
-                )
+                fallback_llm = _build_ollama_llm(None, temperature)
             except Exception as e:
                 log.warning("llm_fallback_init_failed", error=str(e))
 
-        # If Groq API key is not configured, directly return Ollama if available
         if not groq_api_key:
             log.warning("groq_api_key_empty_using_ollama_fallback", ollama_model=settings.ollama_model)
-            if fallback_llm:
-                return fallback_llm
-            return ChatGroq(
-                model=chosen_model,
-                api_key="gsk_placeholder_key",
-                temperature=temperature,
-            )
+            return fallback_llm or _build_ollama_llm(None, temperature)
 
         primary_llm = ChatGroq(
             model=chosen_model,
@@ -79,20 +78,12 @@ def get_llm(
         return primary_llm
 
     elif selected_provider == "ollama":
-        from langchain_ollama import ChatOllama
-
-        chosen_model = model or settings.ollama_model
-        log.info("llm_init", provider="ollama", model=chosen_model, base_url=settings.ollama_base_url)
-        return ChatOllama(
-            model=chosen_model,
-            base_url=settings.ollama_base_url,
-            temperature=temperature,
-        )
+        return _build_ollama_llm(model, temperature)
 
     elif selected_provider == "gemini":
+        chosen_model = model or settings.gemini_model
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        chosen_model = model or settings.gemini_model
         log.info("llm_init", provider="gemini", model=chosen_model)
         return ChatGoogleGenerativeAI(
             model=chosen_model,
@@ -101,9 +92,9 @@ def get_llm(
         )
 
     elif selected_provider == "anthropic":
+        chosen_model = model or "claude-3-5-sonnet-20241022"
         from langchain_anthropic import ChatAnthropic
 
-        chosen_model = model or "claude-3-5-sonnet-20241022"
         log.info("llm_init", provider="anthropic", model=chosen_model)
         return ChatAnthropic(
             model=chosen_model,

@@ -18,6 +18,9 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const hasTailoredAssets = (job: Job) =>
+    Boolean(job.application?.tailored_html || job.application?.pdf_url || job.application?.email_draft);
+
   const loadTailoredJobs = async () => {
     if (!userId) {
       setJobs([]);
@@ -30,7 +33,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
       setJobs(
         data.filter((job) => {
           const status = job.application?.status;
-          return !!job.application && status !== 'tailoring';
+          return !!job.application && (status !== 'tailoring' || hasTailoredAssets(job));
         })
       );
     } catch {

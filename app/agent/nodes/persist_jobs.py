@@ -15,18 +15,25 @@ from app.models.job import Job
 log = structlog.get_logger(__name__)
 
 
-async def _persist_jobs_async(jobs_data: list[dict], user_id: int) -> list[int]:
-    """Insert jobs into database, updating or skipping existing URLs for the specific user."""
-    persisted_ids = []
+async def _persist_jobs_async(jobs_data: list[dict], user_id: int) -> tuple[list[int], list[int]]:
+    """Insert only new jobs for the user and update already-known rows in place."""
+    new_job_ids: list[int] = []
+    existing_job_ids: list[int] = []
     async with app.database.AsyncSessionLocal() as session:
+        urls = [job_dict.get("url") for job_dict in jobs_data if job_dict.get("url")]
+        existing_by_url: dict[str, Job] = {}
+        if urls:
+            stmt = select(Job).where(Job.user_id == user_id, Job.url.in_(urls))
+            res = await session.execute(stmt)
+            existing_by_url = {job.url: job for job in res.scalars().all()}
+
+        new_jobs: list[Job] = []
         for job_dict in jobs_data:
             url = job_dict.get("url")
             if not url:
                 continue
 
-            stmt = select(Job).where(Job.url == url, Job.user_id == user_id)
-            res = await session.execute(stmt)
-            existing = res.scalar_one_or_none()
+            existing = existing_by_url.get(url)
 
             if existing:
                 # Update qualification meta if changed
@@ -42,13 +49,12 @@ async def _persist_jobs_async(jobs_data: list[dict], user_id: int) -> list[int]:
                     existing.apollo_enrichment = {**existing_apollo, **incoming_apollo}
                 if job_dict.get("recruiter_email"):
                     existing.recruiter_email = job_dict.get("recruiter_email")
-                await session.commit()
-                persisted_ids.append(existing.id)
+                existing_job_ids.append(existing.id)
             else:
                 apollo_enrichment = dict(job_dict.get("apollo_enrichment") or {})
                 if job_dict.get("location"):
                     apollo_enrichment["location"] = job_dict.get("location")
-                new_job = Job(
+                new_jobs.append(Job(
                     user_id=user_id,
                     source=job_dict.get("source", "apify"),
                     external_id=job_dict.get("external_id"),
@@ -61,13 +67,16 @@ async def _persist_jobs_async(jobs_data: list[dict], user_id: int) -> list[int]:
                     is_qualified=job_dict.get("is_qualified", True),
                     match_score=job_dict.get("match_score"),
                     filter_reason=job_dict.get("filter_reason"),
-                )
-                session.add(new_job)
-                await session.commit()
-                await session.refresh(new_job)
-                persisted_ids.append(new_job.id)
+                ))
 
-    return persisted_ids
+        if new_jobs:
+            session.add_all(new_jobs)
+            await session.flush()
+            new_job_ids.extend(job.id for job in new_jobs if job.id is not None)
+
+        await session.commit()
+
+    return new_job_ids, existing_job_ids
 
 
 def persist_jobs_node(state: GraphState) -> GraphState:
@@ -83,19 +92,30 @@ def persist_jobs_node(state: GraphState) -> GraphState:
     all_to_persist = relevant_jobs + filtered_jobs
 
     persisted_job_ids = state.get("persisted_job_ids")
+    duplicate_job_ids = state.get("duplicate_job_ids")
 
     if persisted_job_ids is None and all_to_persist:
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                persisted_job_ids = pool.submit(asyncio.run, _persist_jobs_async(all_to_persist, user_id)).result()
+                persisted_job_ids, duplicate_job_ids = pool.submit(
+                    asyncio.run, _persist_jobs_async(all_to_persist, user_id)
+                ).result()
         except Exception as exc:
             log.error("persist_jobs_failed", error=str(exc), application_id=app_id)
             persisted_job_ids = []
+            duplicate_job_ids = []
 
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-    log.info("node_exit", node="persist_jobs", latency_ms=elapsed_ms, count=len(persisted_job_ids or []))
+    log.info(
+        "node_exit",
+        node="persist_jobs",
+        latency_ms=elapsed_ms,
+        count=len(persisted_job_ids or []),
+        duplicates=len(duplicate_job_ids or []),
+    )
 
     return {
         **state,
         "persisted_job_ids": persisted_job_ids or [],
+        "duplicate_job_ids": duplicate_job_ids or [],
     }

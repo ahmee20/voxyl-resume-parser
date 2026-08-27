@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { ApplicationDetail, Job } from '../types/api';
-import { applicationsApi, jobsApi } from '../services/api';
+import type { ApplicationDetail } from '../types/api';
+import { applicationsApi } from '../services/api';
 import {
   X,
   CheckCircle2,
@@ -25,22 +25,35 @@ interface ApplicationTimelineModalProps {
 
 type ModalTab = 'changes' | 'resume' | 'email' | 'job';
 
+type GapChanges = {
+  added_keywords?: Array<string | { keyword: string; evidence?: string }>;
+  removed_keywords?: string[];
+  summary?: string;
+  notes?: string[];
+};
+
+const hasTailoredAssets = (detail: ApplicationDetail | null) =>
+  !!detail && Boolean(detail.tailored_html || detail.rendered_pdf_url || detail.email_draft);
+
 export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> = ({
   applicationId,
-  userId,
+  userId: _userId,
   onClose,
 }) => {
   const [detail, setDetail] = useState<ApplicationDetail | null>(null);
-  const [job, setJob] = useState<Job | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<ModalTab>('changes');
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const resolvedApplicationId =
+    typeof applicationId === 'number' && Number.isFinite(applicationId) && applicationId > 0
+      ? applicationId
+      : null;
 
   const fetchDetail = async () => {
-    if (!applicationId) return;
+    if (!resolvedApplicationId) return;
     try {
       setIsLoading(true);
-      const data = await applicationsApi.getApplication(applicationId);
+      const data = await applicationsApi.getApplication(resolvedApplicationId);
       setDetail(data);
     } catch {
       // ignore
@@ -50,39 +63,26 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
   };
 
   useEffect(() => {
-    fetchDetail();
-  }, [applicationId]);
-
-  useEffect(() => {
-    if (!detail || !userId) {
-      setJob(null);
+    if (!resolvedApplicationId) {
+      setDetail(null);
+      setIsLoading(false);
       return;
     }
-
-    const fetchJob = async () => {
-      try {
-        const jobs = await jobsApi.listJobs(undefined, 100, 0, false, userId);
-        setJob(jobs.find((item) => item.id === detail.job_id) ?? null);
-      } catch {
-        setJob(null);
-      }
-    };
-
-    void fetchJob();
-  }, [detail?.job_id, userId]);
+    fetchDetail();
+  }, [resolvedApplicationId]);
 
   useEffect(() => {
-    if (!detail || detail.status !== 'tailoring') return;
+    if (!resolvedApplicationId || !detail || detail.status !== 'tailoring' || hasTailoredAssets(detail)) return;
     const interval = setInterval(async () => {
       try {
-        const data = await applicationsApi.getApplication(applicationId!);
+        const data = await applicationsApi.getApplication(resolvedApplicationId);
         setDetail(data);
       } catch {
         // ignore
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [detail?.status, applicationId]);
+  }, [detail?.status, resolvedApplicationId]);
 
   const handleCopyEmail = () => {
     if (detail?.email_draft) {
@@ -93,11 +93,67 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
   };
 
   const jobLocation = useMemo(
-    () => job?.apollo_enrichment?.location || job?.apollo_enrichment?.country || 'Location not specified',
-    [job]
+    () =>
+      detail?.job_apollo_enrichment?.location ||
+      detail?.job_apollo_enrichment?.country ||
+      'Location not specified',
+    [detail?.job_apollo_enrichment]
   );
 
-  if (!applicationId) return null;
+  const parsedChanges = useMemo<GapChanges | null>(() => {
+    if (!detail?.gap_analysis) return null;
+    try {
+      const parsed = JSON.parse(detail.gap_analysis) as GapChanges;
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }, [detail?.gap_analysis]);
+
+  const renderAddedKeywords = (items?: Array<string | { keyword: string; evidence?: string }>) => {
+    if (!items?.length) return null;
+
+    return (
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div
+            key={typeof item === 'string' ? item : item.keyword}
+            className="rounded-[16px] border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-800"
+          >
+            <div className="font-semibold">{typeof item === 'string' ? item : item.keyword}</div>
+            {typeof item !== 'string' && item.evidence ? (
+              <div className="mt-1 text-[10px] leading-5 text-emerald-700">
+                Evidence: {item.evidence}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderKeywordChips = (items?: string[], tone: 'added' | 'removed' = 'added') => {
+    if (!items?.length) return null;
+    const toneClasses =
+      tone === 'added'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : 'bg-rose-50 text-rose-700 border-rose-200';
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <span
+            key={`${tone}-${item}`}
+            className={`rounded-full border px-3 py-1 text-[11px] font-medium ${toneClasses}`}
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  if (!resolvedApplicationId) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07110d]/30 p-4 backdrop-blur-md">
@@ -109,14 +165,14 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                 Application assets
               </h3>
               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono uppercase text-emerald-700">
-                App #{applicationId}
+                App #{resolvedApplicationId}
               </span>
-              {detail?.status === 'tailoring' ? (
+              {detail?.status === 'tailoring' && !hasTailoredAssets(detail) ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Tailoring active
                 </span>
-              ) : detail?.status === 'saved' ? (
+              ) : detail?.status === 'saved' || detail?.status === 'pending_approval' || hasTailoredAssets(detail) ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
                   <CheckCircle2 className="h-3 w-3" />
                   Ready
@@ -210,7 +266,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
               <Loader2 className="mb-3 h-8 w-8 animate-spin text-primary-500" />
               <p className="text-xs text-slate-500">Loading application details...</p>
             </div>
-          ) : detail?.status === 'tailoring' ? (
+          ) : detail?.status === 'tailoring' && !hasTailoredAssets(detail) ? (
             <div className="flex flex-col items-center justify-center py-16">
               <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary-500" />
               <h4 className="text-base font-semibold text-primary-600">Preparing your match</h4>
@@ -252,7 +308,44 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                     <TrendingUp className="h-4 w-4 text-primary-500" />
                     <h4 className="text-sm font-semibold text-primary-600">Resume changes and keywords</h4>
                   </div>
-                  {detail.gap_analysis ? (
+                  {parsedChanges ? (
+                    <div className="space-y-4 rounded-[20px] bg-white/80 p-4 text-sm leading-7 text-slate-600">
+                      {parsedChanges.summary ? (
+                        <p className="text-slate-600">{parsedChanges.summary}</p>
+                      ) : null}
+
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                          Added keywords
+                        </div>
+                        {renderAddedKeywords(parsedChanges.added_keywords) || (
+                          <div className="text-xs text-slate-500">No added keywords were recorded.</div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">
+                          Removed keywords
+                        </div>
+                        {renderKeywordChips(parsedChanges.removed_keywords, 'removed') || (
+                          <div className="text-xs text-slate-500">No removed keywords were recorded.</div>
+                        )}
+                      </div>
+
+                      {parsedChanges.notes?.length ? (
+                        <div className="space-y-2">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Notes
+                          </div>
+                          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-500">
+                            {parsedChanges.notes.map((note) => (
+                              <li key={note}>{note}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : detail.gap_analysis ? (
                     <div className="rounded-[20px] bg-white/80 p-4 text-sm leading-7 text-slate-600 whitespace-pre-wrap">
                       {detail.gap_analysis}
                     </div>
@@ -344,12 +437,12 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                     <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                       <span className="inline-flex items-center gap-1.5">
                         <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                        {job?.company || 'Company not available'}
+                        {detail?.job_company || 'Company not available'}
                       </span>
-                      {job?.url ? <span className="text-slate-300">•</span> : null}
-                      {job?.url ? (
+                      {detail?.job_url ? <span className="text-slate-300">•</span> : null}
+                      {detail?.job_url ? (
                         <a
-                          href={job.url}
+                          href={detail.job_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 text-primary-600 hover:underline"
@@ -365,7 +458,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                   </div>
 
                   <div className="rounded-[24px] bg-white/70 p-5 text-sm leading-7 text-slate-700 whitespace-pre-wrap">
-                    {job?.description || 'No detailed description available for this job.'}
+                    {detail?.job_description || 'No detailed description available for this job.'}
                   </div>
                 </div>
               )}

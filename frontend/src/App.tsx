@@ -90,7 +90,10 @@ const DashboardContent: React.FC = () => {
     );
   }
 
-  const handleApplicationStarted = (appId: number) => {
+  const handleApplicationStarted = (appId: number | null | undefined) => {
+    if (typeof appId !== 'number' || !Number.isFinite(appId) || appId <= 0) {
+      return;
+    }
     setApplicationIds((prev) => [appId, ...prev.filter((id) => id !== appId)]);
     setSelectedApplicationId(appId);
   };

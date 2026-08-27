@@ -22,7 +22,7 @@ def scrape_jobs_node(state: GraphState) -> GraphState:
     countries = state.get("preferred_countries", ["US"])
     scraped_jobs = state.get("scraped_jobs")
 
-    max_results = state.get("max_results", 5)
+    max_results = state.get("max_results")
     posted_within_hours = state.get("posted_within_hours")
     if not scraped_jobs:
         scraped_jobs = scrape_jobs_from_apify(

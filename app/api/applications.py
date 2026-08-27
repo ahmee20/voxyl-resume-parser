@@ -22,6 +22,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.agent.nodes.analyze_gaps import analyze_gaps_node
 from app.agent.nodes.tailor_resume import tailor_resume_node
@@ -74,6 +75,12 @@ class ApplicationDetailResponse(BaseModel):
     user_id: int
     job_id: int
     resume_id: Optional[int] = None
+    job_title: Optional[str] = None
+    job_company: Optional[str] = None
+    job_url: Optional[str] = None
+    job_description: Optional[str] = None
+    job_recruiter_email: Optional[str] = None
+    job_apollo_enrichment: Optional[dict[str, Any]] = None
     applied_status: AppliedStatus
     mode: ApplicationMode
     status: ApplicationStatus
@@ -111,9 +118,17 @@ def _resume_profile(user: User | None) -> ResumeProfile:
     )
 
 
+def _effective_application_status(application: Application) -> str:
+    raw_status = application.status.value if hasattr(application.status, "value") else str(application.status)
+    has_assets = bool(application.tailored_html or application.rendered_pdf_url or application.email_draft)
+    if raw_status == "tailoring" and has_assets:
+        return "saved"
+    return raw_status
+
+
 # ── Background pipeline runner ───────────────────────────────────────────────
 
-def _run_pipeline_sync(
+def _run_core_pipeline_sync(
     application_id: int,
     user_id: int,
     base_resume_text: str,
@@ -181,6 +196,17 @@ def _run_pipeline_sync(
     timeline_entries.append(("draft_email", {"email_draft": (email_draft_val or "")[:300]}, lat))
     log.info("pipeline_step_done", step="draft_email", latency_ms=lat, app_id=application_id)
 
+    return state, timeline_entries, email_draft_val
+
+
+def _run_review_pipeline_sync(
+    state: GraphState,
+):
+    """Run the slower reviewer steps after the core assets are already saved."""
+    application_id = state.get("application_id")
+    user_id = state.get("user_id")
+    timeline_entries = []
+
     # Step E: ATS Reviewer
     t0 = time.perf_counter()
     state = agent_ats_reviewer_node(state)
@@ -197,7 +223,7 @@ def _run_pipeline_sync(
     timeline_entries.append(("agent_factual_reviewer", factual_data, lat))
     log.info("pipeline_step_done", step="factual_reviewer", latency_ms=lat, app_id=application_id)
 
-    return state, timeline_entries, ats_data, email_draft_val
+    return state, timeline_entries, ats_data
 
 
 async def _persist_pipeline_results(
@@ -208,8 +234,10 @@ async def _persist_pipeline_results(
     base_resume_text: str,
     state: dict,
     timeline_entries: list,
-    ats_data: dict,
+    ats_data: dict | None,
     email_draft_val: str | None,
+    application_status: ApplicationStatus = ApplicationStatus.saved,
+    persist_tailored_resume: bool = True,
 ):
     """Persist pipeline results using a fresh async DB session."""
     async with AsyncSessionLocal() as db:
@@ -217,7 +245,7 @@ async def _persist_pipeline_results(
             # 1. Save tailored resume version first
             tailored_html = state.get("tailored_resume_html")
             tailored_resume_id = None
-            if tailored_html:
+            if persist_tailored_resume and tailored_html:
                 try:
                     tailored_resume = Resume(
                         user_id=user_id,
@@ -230,8 +258,11 @@ async def _persist_pipeline_results(
                     await db.commit()
                     await db.refresh(tailored_resume)
                     tailored_resume_id = tailored_resume.id
+                    state["tailored_resume_id"] = tailored_resume_id
                 except Exception as res_exc:
                     log.warning("tailored_resume_save_skipped", error=str(res_exc))
+            else:
+                tailored_resume_id = state.get("tailored_resume_id")
 
             # 2. Update Application record with all tailored assets
             stmt = select(Application).where(Application.id == application_id)
@@ -240,21 +271,31 @@ async def _persist_pipeline_results(
 
             if application:
                 pdf_url = state.get("pdf_url")
-                ats_score_val = ats_data.get("score", 85)
+                ats_score_val = (ats_data or {}).get("score", application.ats_score)
 
-                application.status = ApplicationStatus.saved
+                application.status = application_status
                 application.applied_status = AppliedStatus.manual
                 application.resume_id = tailored_resume_id or base_resume_id
-                application.tailored_html = tailored_html
-                application.rendered_pdf_url = pdf_url
-                application.drive_folder_url = pdf_url
-                application.email_draft = email_draft_val
-                application.gap_analysis = state.get("gap_analysis")
-                application.ats_score = ats_score_val
-                application.approval_attempts = 1
+                if tailored_html:
+                    application.tailored_html = tailored_html
+                if pdf_url:
+                    application.rendered_pdf_url = pdf_url
+                    application.drive_folder_url = pdf_url
+                if email_draft_val is not None:
+                    application.email_draft = email_draft_val
+                if state.get("gap_analysis"):
+                    application.gap_analysis = state.get("gap_analysis")
+                if ats_data and ats_score_val is not None:
+                    application.ats_score = ats_score_val
+                application.approval_attempts = max(application.approval_attempts or 0, 1)
 
                 await db.commit()
-                log.info("pipeline_bg_complete", application_id=application_id, ats_score=ats_score_val)
+                log.info(
+                    "pipeline_bg_assets_persisted",
+                    application_id=application_id,
+                    status=application_status.value if hasattr(application_status, "value") else str(application_status),
+                    ats_score=ats_score_val,
+                )
             else:
                 log.error("pipeline_bg_app_not_found", application_id=application_id)
 
@@ -306,9 +347,9 @@ async def run_pipeline_background(
     """Async wrapper that executes LLM pipeline in threadpool, then persists results."""
     try:
         loop = asyncio.get_event_loop()
-        state, timeline_entries, ats_data, email_draft_val = await loop.run_in_executor(
+        state, core_timeline_entries, email_draft_val = await loop.run_in_executor(
             None,
-            _run_pipeline_sync,
+            _run_core_pipeline_sync,
             application_id,
             user_id,
             base_resume_text,
@@ -331,13 +372,48 @@ async def run_pipeline_background(
             base_resume_version=base_resume_version,
             base_resume_text=base_resume_text,
             state=state,
-            timeline_entries=timeline_entries,
-            ats_data=ats_data,
+            timeline_entries=core_timeline_entries,
+            ats_data=None,
             email_draft_val=email_draft_val,
+            application_status=ApplicationStatus.saved,
+            persist_tailored_resume=True,
         )
+
+        try:
+            state, review_timeline_entries, ats_data = await loop.run_in_executor(
+                None,
+                _run_review_pipeline_sync,
+                state,
+            )
+
+            await _persist_pipeline_results(
+                application_id=application_id,
+                user_id=user_id,
+                base_resume_id=base_resume_id,
+                base_resume_version=base_resume_version,
+                base_resume_text=base_resume_text,
+                state=state,
+                timeline_entries=review_timeline_entries,
+                ats_data=ats_data,
+                email_draft_val=email_draft_val,
+                application_status=ApplicationStatus.saved,
+                persist_tailored_resume=False,
+            )
+        except Exception as review_exc:
+            log.warning("pipeline_review_phase_failed", error=str(review_exc), application_id=application_id)
 
     except Exception as exc:
         log.error("pipeline_bg_crashed", error=str(exc), application_id=application_id)
+        try:
+            async with AsyncSessionLocal() as db:
+                stmt = select(Application).where(Application.id == application_id)
+                res = await db.execute(stmt)
+                application = res.scalar_one_or_none()
+                if application:
+                    application.status = ApplicationStatus.failed
+                    await db.commit()
+        except Exception as db_exc:
+            log.warning("pipeline_bg_failed_status_update_skipped", error=str(db_exc), application_id=application_id)
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -552,7 +628,7 @@ async def get_application_details(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve full application details, linked job, tailored assets, and observability timeline."""
-    stmt = select(Application).where(Application.id == application_id)
+    stmt = select(Application).options(selectinload(Application.job)).where(Application.id == application_id)
     result = await db.execute(stmt)
     app_record = result.scalar_one_or_none()
 
@@ -604,9 +680,15 @@ async def get_application_details(
         "user_id": app_record.user_id,
         "job_id": app_record.job_id,
         "resume_id": app_record.resume_id,
+        "job_title": app_record.job.title if app_record.job else None,
+        "job_company": app_record.job.company if app_record.job else None,
+        "job_url": app_record.job.url if app_record.job else None,
+        "job_description": app_record.job.description if app_record.job else None,
+        "job_recruiter_email": app_record.job.recruiter_email if app_record.job else None,
+        "job_apollo_enrichment": app_record.job.apollo_enrichment if app_record.job else None,
         "applied_status": app_record.applied_status.value,
         "mode": app_record.mode.value,
-        "status": app_record.status.value,
+        "status": _effective_application_status(app_record),
         "pdf_url": app_record.rendered_pdf_url or app_record.drive_folder_url,
         "tailored_html": app_record.tailored_html,
         "ats_score": app_record.ats_score,

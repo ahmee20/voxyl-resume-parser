@@ -20,9 +20,12 @@ Your task is to take a candidate's resume in HTML format and a detailed gap anal
 
 RULES:
 1. PRESERVE LAYOUT: Keep all HTML tags, hierarchy, section order, and CSS classes intact.
-2. TAILOR CONTENT: Refine bullet points, summary, and skills list to naturally incorporate the target keywords identified in the gap analysis.
-3. NO HALLUCINATION: Do NOT add fabricated job titles, companies, dates, or degrees. Only enhance descriptions of existing genuine experience.
-4. OUTPUT FORMAT: Return ONLY the tailored raw HTML string (from <div class="resume"> to </div>). Do not include any markdown backticks or ```html wrappers.
+2. TAILOR CONTENT: Refine bullet points, summary, and skills list to naturally incorporate the target keywords identified in the gap analysis. Keep the edits minimal and grounded in the existing resume.
+3. SECTION ALIASES: Do not drop a section just because the heading is phrased differently. Treat headings like professional experience, work experience, industry experience, job experience, and previous experience as the same section when preserving content.
+4. NO HALLUCINATION: Do NOT add fabricated job titles, companies, dates, degrees, or tools. Only enhance descriptions of existing genuine experience.
+5. NO OLD CRITERIA: Use the provided gap analysis as the only tailoring signal. Do not reuse prior runs or job-description language that is not supported by the resume.
+6. UNCERTAINTY: If a change feels speculative, leave the original wording mostly intact and keep the edit conservative rather than forcing a new claim.
+7. OUTPUT FORMAT: Return ONLY the tailored raw HTML string (from <div class="resume"> to </div>). Do not include any markdown backticks or ```html wrappers.
 """
 
 

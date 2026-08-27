@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     # ── PDF.co ────────────────────────────────────────────────────────────────
     pdfco_api_key: str
+    pdfco_resume_template_id: int = 37621
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = (

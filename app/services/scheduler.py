@@ -29,6 +29,7 @@ from app.models.user import SendMode, User
 from app.services.apify_scraper import scrape_jobs_from_apify
 from app.services.batch_pipeline import run_batch_pipeline
 from app.services.google_delivery import send_gmail_email
+from app.services.job_deduper import split_fresh_and_known_jobs
 from app.services.resume_template import ResumeProfile, render_resume_html
 from app.utils.security import decrypt_token
 
@@ -130,6 +131,11 @@ async def _run_auto_cycle_for_user(user: User) -> None:
             "preferred_countries": preferred_countries,
             "scraped_jobs": scraped_jobs,
         }
+
+        fresh_jobs, duplicate_jobs = await split_fresh_and_known_jobs(session, user.id, state.get("scraped_jobs", []))
+        state["scraped_jobs"] = fresh_jobs
+        state["duplicate_jobs"] = duplicate_jobs
+        state["duplicate_job_ids"] = []
 
         state = await asyncio.to_thread(enrich_jobs_node, state)
         state = await asyncio.to_thread(filter_relevant_node, state)

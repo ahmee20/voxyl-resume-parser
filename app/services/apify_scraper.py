@@ -72,7 +72,7 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
 def scrape_jobs_from_apify(
     queries: list[str],
     countries: Optional[list[str]] = None,
-    max_results: Optional[int] = 5,
+    max_results: Optional[int] = None,
     posted_within_hours: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """

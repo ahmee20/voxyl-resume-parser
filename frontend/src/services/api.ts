@@ -84,14 +84,21 @@ export const jobsApi = {
     scraped_count: number;
     relevant_count: number;
     persisted_job_ids: number[];
+    jobs?: Job[];
   }> => {
-    const response = await apiClient.post('/jobs/discover', {
+    const payload: Record<string, unknown> = {
       user_id: userId,
       resume_id: options?.resumeId,
       target_role: options?.targetRole,
       preferred_roles: options?.preferredRoles,
       countries: options?.countries,
-      max_results: options?.maxResults ?? 5,
+    };
+    if (options?.maxResults !== undefined) {
+      payload.max_results = options.maxResults;
+    }
+
+    const response = await apiClient.post('/jobs/discover', {
+      ...payload,
     });
     return response.data;
   },
@@ -109,13 +116,19 @@ export const jobsApi = {
     total_batches: number;
     message: string;
   }> => {
-    const response = await apiClient.post('/jobs/discover-and-apply', {
+    const payload: Record<string, unknown> = {
       user_id: userId,
       resume_id: options?.resumeId,
       target_role: options?.targetRole,
       preferred_roles: options?.preferredRoles,
       countries: options?.countries,
-      max_results: options?.maxResults ?? 10,
+    };
+    if (options?.maxResults !== undefined) {
+      payload.max_results = options.maxResults;
+    }
+
+    const response = await apiClient.post('/jobs/discover-and-apply', {
+      ...payload,
     });
     return response.data;
   },

@@ -49,6 +49,9 @@ const AVAILABLE_COUNTRIES = [
   { code: 'JP', name: 'Japan' },
 ];
 
+const hasTailoredAssets = (app?: Job['application']) =>
+  Boolean(app?.tailored_html || app?.pdf_url || app?.email_draft);
+
 export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   activeResume,
   onApplicationStarted,
@@ -65,7 +68,9 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const [inspectingJob, setInspectingJob] = useState<Job | null>(null);
   const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
 
-  const [selectedCountries, setSelectedCountries] = useState<string[]>(user?.preferred_countries?.length ? user.preferred_countries : ['REMOTE', 'US']);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(
+    user?.preferred_countries?.length ? user.preferred_countries : ['REMOTE', 'US']
+  );
 
   const [discoveryStats, setDiscoveryStats] = useState<{
     queries?: string[];
@@ -75,7 +80,9 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   } | null>(null);
   const [runningJobId, setRunningJobId] = useState<number | null>(null);
   const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
-  const cacheKey = `voxyl.jobs.cache.${user?.id ?? 'guest'}.${latestOnly ? 'latest' : 'all'}`;
+  const allJobsCacheKey = `voxyl.jobs.cache.${user?.id ?? 'guest'}.all`;
+  const latestJobsCacheKey = `voxyl.jobs.cache.${user?.id ?? 'guest'}.latest`;
+  const cacheKey = latestOnly ? latestJobsCacheKey : allJobsCacheKey;
   const defaultCountries = user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : ['REMOTE', 'US'];
 
   const persistCache = (nextJobs: Job[], nextStats: typeof discoveryStats, nextCountries: string[]) => {
@@ -97,7 +104,32 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         setJobs([]);
         return;
       }
-      const limit = latestOnly ? 10 : 100;
+      if (latestOnly) {
+        const cachedValue = sessionStorage.getItem(cacheKey);
+        if (cachedValue) {
+          try {
+            const parsed = JSON.parse(cachedValue) as {
+              jobs?: Job[];
+              discoveryStats?: typeof discoveryStats;
+              selectedCountries?: string[];
+              cachedAt?: number;
+            };
+            if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
+              setJobs(parsed.jobs ?? []);
+              setDiscoveryStats(parsed.discoveryStats ?? null);
+              if (parsed.selectedCountries?.length) {
+                setSelectedCountries(parsed.selectedCountries.slice(0, 3));
+              }
+              return;
+            }
+          } catch {
+            sessionStorage.removeItem(cacheKey);
+          }
+        }
+        setJobs([]);
+        return;
+      }
+      const limit = 100;
       const data = await jobsApi.listJobs(undefined, limit, 0, latestOnly, user?.id);
       setJobs(data);
       persistCache(data, statsOverride ?? discoveryStats, selectedCountries);
@@ -120,6 +152,34 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     }
 
     const cachedValue = sessionStorage.getItem(cacheKey);
+    if (latestOnly) {
+      if (cachedValue) {
+        try {
+          const parsed = JSON.parse(cachedValue) as {
+            jobs?: Job[];
+            discoveryStats?: typeof discoveryStats;
+            selectedCountries?: string[];
+            cachedAt?: number;
+          };
+          if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
+            setJobs(parsed.jobs ?? []);
+            setDiscoveryStats(parsed.discoveryStats ?? null);
+            if (parsed.selectedCountries?.length) {
+              setSelectedCountries(parsed.selectedCountries.slice(0, 3));
+            }
+            setIsLoading(false);
+            return;
+          }
+        } catch {
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+      setJobs([]);
+      setDiscoveryStats(null);
+      setIsLoading(false);
+      return;
+    }
+
     if (cachedValue) {
       try {
         const parsed = JSON.parse(cachedValue) as {
@@ -169,7 +229,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
   const selectAllUntailored = () => {
     const untailoredIds = jobs
-      .filter((j) => !j.application || (j.application.status !== 'saved' && j.application.status !== 'tailoring'))
+      .filter((j) => {
+        const app = j.application;
+        return !app || (!(app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent') && !hasTailoredAssets(app));
+      })
       .map((j) => j.id);
     setSelectedJobIds(untailoredIds);
   };
@@ -196,9 +259,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         persisted: res.persisted_job_ids.length,
       };
       setDiscoveryStats(nextStats);
-      persistCache(jobs, nextStats, selectedCountries);
+      setSelectedJobIds([]);
+      setJobs(res.jobs ?? []);
+      persistCache(res.jobs ?? [], nextStats, selectedCountries);
       onDiscoverySuccess?.();
-      await fetchJobs(true, nextStats);
     } catch {
       // ignore
     } finally {
@@ -224,7 +288,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
   const handleCardClick = (job: Job) => {
     const app = job.application;
-    const isTailored = app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent');
+    const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
 
     if (isTailored && app) {
       onApplicationStarted(app.id);
@@ -237,7 +301,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const handleSingleJobTailor = async (job: Job, e: React.MouseEvent) => {
     e.stopPropagation();
     const app = job.application;
-    const isTailored = app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent');
+    const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
 
     if (isTailored && app) {
       onApplicationStarted(app.id);
@@ -407,8 +471,8 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
             const isProcessing = runningJobId === job.id;
             const apollo = job.apollo_enrichment;
             const app = job.application;
-            const isTailored = app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent');
-            const isTailoring = app && app.status === 'tailoring';
+            const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
+            const isTailoring = !!app && app.status === 'tailoring' && !hasTailoredAssets(app);
             const isSelected = selectedJobIds.includes(job.id);
 
               return (

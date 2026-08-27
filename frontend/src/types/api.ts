@@ -109,6 +109,23 @@ export interface ApplicationDetail {
   user_id: number;
   job_id: number;
   resume_id?: number | null;
+  job_title?: string | null;
+  job_company?: string | null;
+  job_url?: string | null;
+  job_description?: string | null;
+  job_recruiter_email?: string | null;
+  job_apollo_enrichment?: {
+    domain?: string;
+    industry?: string;
+    estimated_num_employees?: number | string;
+    company_size?: string;
+    location?: string;
+    recruiter_name?: string;
+    recruiter_title?: string;
+    city?: string;
+    country?: string;
+    verified?: boolean;
+  } | null;
   applied_status: "no" | "yes" | "manual";
   mode: "manual" | "auto";
   status: string;

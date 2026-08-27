@@ -22,6 +22,9 @@ interface JobDetailsModalProps {
   onViewTailored: (applicationId: number) => void;
 }
 
+const hasTailoredAssets = (app: Job['application']) =>
+  Boolean(app?.tailored_html || app?.pdf_url || app?.email_draft);
+
 export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   job,
   activeResume,
@@ -34,8 +37,8 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   if (!job) return null;
 
   const app = job.application;
-  const isTailored = app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent');
-  const isTailoring = app && app.status === 'tailoring';
+  const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
+  const isTailoring = !!app && app.status === 'tailoring' && !hasTailoredAssets(app);
   const apollo = job.apollo_enrichment;
 
   const handleStartTailoring = async () => {

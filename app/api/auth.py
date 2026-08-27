@@ -105,14 +105,9 @@ async def get_current_user(
 
 @router.get("/google/login", summary="Initiate Google OAuth login")
 async def google_login(request: Request):
-    """Redirect to Google OAuth consent screen requesting offline access."""
+    """Redirect to Google OAuth consent screen for basic sign-in."""
     redirect_uri = settings.google_redirect_uri
-    return await oauth.google.authorize_redirect(
-        request,
-        redirect_uri,
-        access_type="offline",
-        prompt="consent",
-    )
+    return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
 @router.get("/google/callback", summary="Google OAuth callback")

@@ -160,7 +160,7 @@ def create_app() -> FastAPI:
         title="Voxyl",
         description=(
             "Agentic pipeline: discovers jobs, tailors resumes with LangGraph + Claude, "
-            "and optionally applies on the user's behalf via Gmail. "
+            "and manages the user's job-search workspace. "
             "Every run is traced in LangSmith."
         ),
         version="0.1.0",

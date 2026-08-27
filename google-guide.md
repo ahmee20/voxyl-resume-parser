@@ -30,7 +30,7 @@ database stays on Supabase.
 ## Step 2. Enable the required Google services
 
 1. In Google Cloud Console, enable the OAuth consent screen / Google Auth Platform.
-2. If you use Gmail or Drive features, keep those APIs available too.
+2. You only need the basic Google sign-in setup now.
 
 ## Step 3. Deploy the FastAPI backend to Render
 
@@ -147,16 +147,14 @@ https://YOUR-BACKEND-URL/auth/google/callback
 
 5. Save the client ID and secret.
 
-### 4.4 Watch out for sensitive scopes
+### 4.4 Keep scopes minimal
 
-1. Your app currently requests Google login plus Gmail and Drive scopes.
-2. Gmail and Drive scopes are sensitive.
-3. If Google blocks public use, that is usually because of those scopes.
-4. If you want the fastest path for public testing, use only:
+1. The app now only requests:
    - `openid`
    - `email`
    - `profile`
-5. If you keep Gmail and Drive scopes, Google may require verification before full public access.
+2. That is enough for Google sign-in.
+3. You should no longer need Gmail or Drive API access for this app.
 
 ---
 

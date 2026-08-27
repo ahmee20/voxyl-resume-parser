@@ -78,20 +78,21 @@ def scrape_jobs_from_apify(
     """
     Run Apify Actor or return mock listings if token is not configured.
     Normalizes records into a standard dictionary format.
-    When max_results is None, the scraper does not cap the returned items.
+    When max_results is None, the scraper uses the configured default cap.
     """
     target_role = queries[0] if queries else "Software Engineer"
     selected_countries = countries or ["REMOTE", "US"]
     country_names = [COUNTRY_MAP.get(c.upper(), c) for c in selected_countries]
     location_str = ", ".join(country_names) if country_names else "Remote"
-    limit = max_results if max_results and max_results > 0 else None
+    limit = max_results if max_results is not None else settings.apify_max_results
+    limit = limit if limit and limit > 0 else None
     window = timedelta(hours=posted_within_hours) if posted_within_hours else None
     cutoff = datetime.now(timezone.utc) - window if window else None
 
     if not settings.apify_api_token or settings.apify_api_token == "test-apify-token":
         log.warning("apify_token_not_configured_using_mock_results", queries=queries, location=location_str)
         now_iso = datetime.now(timezone.utc).isoformat()
-        mock_count = limit or 12
+        mock_count = limit or settings.apify_max_results
         return [
             {
                 "external_id": f"mock_job_{i}",

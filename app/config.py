@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     # ── Apify ─────────────────────────────────────────────────────────────────
     apify_api_token: str
     apify_actor_id: str = ""
+    apify_max_results: int = 5
 
     # ── Apollo.io ─────────────────────────────────────────────────────────────
     apollo_api_key: str

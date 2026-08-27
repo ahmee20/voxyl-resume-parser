@@ -83,6 +83,45 @@ const TermsPage: React.FC = () => (
   </PublicLegalPage>
 );
 
+const HomePage: React.FC = () => (
+  <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+    <div className="site-shell">
+      <div className="mx-auto grid max-w-4xl gap-6 rounded-[36px] border border-white/60 bg-white/88 p-6 shadow-[0_20px_60px_rgba(18,32,26,0.08)] backdrop-blur-xl lg:grid-cols-[1.05fr_0.95fr] sm:p-10">
+        <section className="space-y-6">
+          <div className="flex items-center gap-3">
+            <img src="/voxyl-mark.png" alt="Voxyl" className="h-10 w-auto" />
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent-emerald">Public home</p>
+          </div>
+          <div className="space-y-4">
+            <h1 className="hero-type text-[clamp(2.6rem,6vw,4.8rem)] font-semibold leading-[0.95] text-primary-600">
+              Voxyl Resume
+            </h1>
+            <p className="max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
+              Voxyl Resume is a focused workspace for job seekers who want their resumes, preferences, and applications
+              organized in one place.
+            </p>
+            <p className="max-w-xl text-sm leading-7 text-slate-600">
+              This page is intentionally simple and stays out of the main app navigation. It exists so Google and other
+              services have a clean public home page for the product.
+            </p>
+          </div>
+        </section>
+
+        <aside className="rounded-[28px] bg-white/70 p-6">
+          <div className="space-y-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent-emerald">What it is</p>
+            <ul className="space-y-3 text-sm leading-7 text-slate-600">
+              <li>Resume tailoring and job search tools.</li>
+              <li>Private candidate profile and application workspace.</li>
+              <li>Built for the Voxyl Resume app and its connected services.</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+);
+
 const DashboardContent: React.FC = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'jobs' | 'applications' | 'profile'>(() => {
@@ -276,6 +315,10 @@ export default function App() {
 
   if (pathname === '/terms') {
     return <TermsPage />;
+  }
+
+  if (pathname === '/home') {
+    return <HomePage />;
   }
 
   return (

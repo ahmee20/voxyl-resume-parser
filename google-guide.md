@@ -185,6 +185,12 @@ VITE_API_URL=https://voxyl-resume.onrender.com
 
 7. Redeploy the site.
 
+### Public URLs for Google fields
+
+1. Application home page: `https://voxyl-resume.netlify.app/home`
+2. Privacy policy: `https://voxyl-resume.netlify.app/privacy`
+3. Terms of service: `https://voxyl-resume.netlify.app/terms`
+
 ### What `VITE_API_URL` does
 
 1. The frontend uses `VITE_API_URL` to know where the backend lives.

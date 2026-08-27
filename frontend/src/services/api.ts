@@ -2,7 +2,6 @@ import axios from 'axios';
 import type { User, UserProfileUpdate, Resume, Job, ApplicationDetail } from '../types/api';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
-const AUTH_TOKEN_KEY = 'voxyl.auth.token';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -10,17 +9,6 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-});
-
-apiClient.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const authToken = sessionStorage.getItem(AUTH_TOKEN_KEY);
-    if (authToken) {
-      config.headers = config.headers ?? {};
-      config.headers.Authorization = `Bearer ${authToken}`;
-    }
-  }
-  return config;
 });
 
 export const authApi = {

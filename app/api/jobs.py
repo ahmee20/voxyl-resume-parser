@@ -24,7 +24,6 @@ from app.models.user import User
 from app.services.job_deduper import split_fresh_and_known_jobs
 from app.services.batch_pipeline import run_batch_pipeline_background
 from app.services.resume_template import ResumeProfile, render_resume_html
-from app.utils.security import decode_auth_token
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -153,10 +152,6 @@ async def list_jobs(
     resolved_user_id = user_id
     if not resolved_user_id and request:
         resolved_user_id = request.session.get("user_id")
-    if not resolved_user_id and request:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.lower().startswith("bearer "):
-            resolved_user_id = decode_auth_token(auth_header.split(" ", 1)[1].strip())
 
     if not resolved_user_id:
         raise HTTPException(

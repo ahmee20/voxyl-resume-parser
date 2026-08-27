@@ -5,6 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  VITE_API_URL = "https://voxyl-resume.onrender.com"
 
 [[redirects]]
   from = "/*"

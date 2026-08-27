@@ -207,7 +207,7 @@ async def google_callback(
     request.session["user_email"] = user.email
 
     # 5. Redirect back to frontend dashboard
-    frontend_url = "http://localhost:5173/"
+    frontend_url = settings.frontend_url.rstrip("/") + "/"
     return RedirectResponse(url=frontend_url, status_code=status.HTTP_302_FOUND)
 
 

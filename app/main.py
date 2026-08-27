@@ -153,6 +153,9 @@ async def lifespan(app: FastAPI):
 # ── App factory ───────────────────────────────────────────────────────────────
 
 def create_app() -> FastAPI:
+    frontend_origin = settings.frontend_url.rstrip("/")
+    production_https = frontend_origin.startswith("https://")
+
     app = FastAPI(
         title="Voxyl",
         description=(
@@ -172,14 +175,16 @@ def create_app() -> FastAPI:
         secret_key=settings.session_secret_key,
         session_cookie="job_autopilot_session",
         max_age=14 * 24 * 3600,  # 14 days
-        same_site="lax",
-        https_only=False,  # Set to True in production HTTPS environments
+        same_site="none" if production_https else "lax",
+        https_only=production_https,
     )
 
     # CORS — tighten in production
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
+            frontend_origin,
+            "https://voxyl-resume.netlify.app",
             "http://localhost:3000",
             "http://localhost:8000",
             "http://localhost:5173",

@@ -13,6 +13,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const USER_CACHE_KEY = 'voxyl.auth.user';
+const AUTH_TOKEN_KEY = 'voxyl.auth.token';
 
 const clearVoxylSessionCache = () => {
   const keysToRemove: string[] = [];
@@ -25,11 +26,33 @@ const clearVoxylSessionCache = () => {
   keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 };
 
+const bootstrapAuthTokenFromUrl = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  if (!hash) {
+    return;
+  }
+
+  const params = new URLSearchParams(hash);
+  const authToken = params.get('auth_token');
+  if (!authToken) {
+    return;
+  }
+
+  sessionStorage.setItem(AUTH_TOKEN_KEY, authToken);
+  window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const checkAuth = async () => {
+    bootstrapAuthTokenFromUrl();
+
     const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
     if (cachedUser) {
       try {
@@ -84,6 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setUser(null);
       clearVoxylSessionCache();
+      sessionStorage.removeItem(AUTH_TOKEN_KEY);
     }
   };
 

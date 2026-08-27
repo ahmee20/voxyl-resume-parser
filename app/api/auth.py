@@ -3,6 +3,8 @@ app/api/auth.py — Google OAuth2 / OIDC authentication routes and session handl
 """
 
 from typing import Optional
+from urllib.parse import quote
+
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -15,7 +17,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import SendMode, User
 from app.services.auth import oauth
-from app.utils.security import encrypt_token
+from app.utils.security import create_auth_token, decode_auth_token, encrypt_token
 
 log = structlog.get_logger(__name__)
 
@@ -83,6 +85,12 @@ async def get_current_user(
 ) -> User:
     """Dependency: Extract authenticated user from session cookie."""
     user_id = request.session.get("user_id")
+    if not user_id:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            bearer_token = auth_header.split(" ", 1)[1].strip()
+            user_id = decode_auth_token(bearer_token)
+
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -201,8 +209,10 @@ async def google_callback(
     request.session["user_id"] = user.id
     request.session["user_email"] = user.email
 
-    # 5. Redirect back to frontend dashboard
+    # 5. Redirect back to frontend dashboard with a signed bootstrap token for strict mobile browsers.
     frontend_url = settings.frontend_url.rstrip("/") + "/"
+    auth_token = quote(create_auth_token(user.id), safe="")
+    frontend_url = f"{frontend_url}#auth_token={auth_token}"
     return RedirectResponse(url=frontend_url, status_code=status.HTTP_302_FOUND)
 
 

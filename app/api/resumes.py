@@ -16,6 +16,7 @@ from app.api.auth import get_current_user
 from app.services.resume_parser import extract_text
 from app.agent.nodes.extract_resume import generate_resume_html_skeleton
 from app.services.resume_template import ResumeProfile, render_resume_html
+from app.utils.security import decode_auth_token
 
 log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/resumes", tags=["resumes"])
@@ -60,6 +61,10 @@ async def upload_resume(
 
     # 1. Resolve active user_id from query or session
     resolved_user_id = user_id or request.session.get("user_id")
+    if not resolved_user_id:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            resolved_user_id = decode_auth_token(auth_header.split(" ", 1)[1].strip())
 
     try:
         if not resolved_user_id:

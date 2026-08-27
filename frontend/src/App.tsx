@@ -12,6 +12,76 @@ import type { Resume } from './types/api';
 
 const ACTIVE_TAB_KEY = 'voxyl.activeTab';
 const DASHBOARD_BATCH_KEY = 'voxyl.dashboard.showLatestBatch';
+const normalizePath = (pathname: string) => {
+  const trimmed = pathname.replace(/\/+$/, '');
+  return trimmed === '' ? '/' : trimmed;
+};
+
+const PublicLegalPage: React.FC<{
+  title: string;
+  lastUpdated: string;
+  children: React.ReactNode;
+}> = ({ title, lastUpdated, children }) => {
+  return (
+    <div className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+      <div className="site-shell">
+        <div className="mx-auto max-w-3xl rounded-[32px] border border-white/60 bg-white/88 p-6 shadow-[0_20px_60px_rgba(18,32,26,0.08)] backdrop-blur-xl sm:p-10">
+          <div className="mb-8 flex items-center gap-3">
+            <img src="/voxyl-mark.png" alt="Voxyl" className="h-10 w-auto" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent-emerald">Voxyl</p>
+              <h1 className="text-2xl font-semibold tracking-tight text-primary-600 sm:text-3xl">{title}</h1>
+            </div>
+          </div>
+
+          <p className="mb-8 text-sm text-slate-500">Last updated: {lastUpdated}</p>
+
+          <div className="space-y-5 text-sm leading-7 text-slate-600">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PrivacyPage: React.FC = () => (
+  <PublicLegalPage title="Privacy Policy" lastUpdated="August 27, 2026">
+    <p>
+      Voxyl stores the information needed to run the app, including your account details, uploaded resumes, job and
+      application data, and any Google authorization data you choose to connect.
+    </p>
+    <p>
+      We use this data to sign you in, tailor resumes, manage job applications, and keep your session working across
+      visits.
+    </p>
+    <p>
+      We do not sell your personal data. We only share information with the services required to provide the app, such
+      as your hosting, database, authentication, and connected AI or enrichment providers.
+    </p>
+    <p>
+      If you do not want Voxyl to keep using this data, disconnect your account and stop using the service. You can ask
+      the site owner to remove your data if needed.
+    </p>
+  </PublicLegalPage>
+);
+
+const TermsPage: React.FC = () => (
+  <PublicLegalPage title="Terms of Service" lastUpdated="August 27, 2026">
+    <p>
+      Voxyl is provided as a job search and application assistant. You agree to use it responsibly and to review any
+      automated output before submitting it anywhere.
+    </p>
+    <p>
+      You are responsible for the accuracy of the information you upload and for complying with the rules of any job
+      board, employer, or third-party service you connect.
+    </p>
+    <p>
+      The service is offered on an as-is basis. The site owner may update, pause, or change the service at any time.
+    </p>
+    <p>
+      If you do not agree with these terms, do not use the service.
+    </p>
+  </PublicLegalPage>
+);
 
 const DashboardContent: React.FC = () => {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -198,6 +268,16 @@ const DashboardContent: React.FC = () => {
 };
 
 export default function App() {
+  const pathname = typeof window !== 'undefined' ? normalizePath(window.location.pathname) : '/';
+
+  if (pathname === '/privacy') {
+    return <PrivacyPage />;
+  }
+
+  if (pathname === '/terms') {
+    return <TermsPage />;
+  }
+
   return (
     <AuthProvider>
       <DashboardContent />

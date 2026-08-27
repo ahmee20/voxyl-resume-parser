@@ -11,6 +11,7 @@ Rules:
 import uuid
 from typing import AsyncGenerator
 
+import structlog
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -21,6 +22,8 @@ from sqlalchemy.pool import NullPool
 
 from app.config import settings
 
+log = structlog.get_logger(__name__)
+
 
 def _generate_unique_stmt_name() -> str:
     """Generate unique statement name for asyncpg to prevent PgBouncer statement conflicts."""
@@ -29,8 +32,14 @@ def _generate_unique_stmt_name() -> str:
 
 # ── Engine ────────────────────────────────────────────────────────────────────
 # Disable client-side pooling & prepared statement caching for Supabase / PgBouncer
+database_url = settings.resolved_database_url
+if database_url == settings.database_url and "db." in database_url and "supabase.co" in database_url:
+    log.warning(
+        "direct_supabase_host_detected",
+        note="Set SUPABASE_POOLER_URL in Render to use the pooler host.",
+    )
 engine_kwargs = {"echo": False}
-if "postgresql" in settings.database_url or "asyncpg" in settings.database_url:
+if "postgresql" in database_url or "asyncpg" in database_url:
     engine_kwargs.update({
         "poolclass": NullPool,
         "connect_args": {
@@ -46,7 +55,7 @@ else:
     engine_kwargs.update({"pool_pre_ping": True})
 
 engine = create_async_engine(
-    settings.database_url,
+    database_url,
     **engine_kwargs,
 )
 

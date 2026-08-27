@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     google_client_secret: str
     google_redirect_uri: str = "https://voxyl-resume.onrender.com/auth/google/callback"
     frontend_url: str = "https://voxyl-resume.netlify.app/"
+    supabase_pooler_url: str = ""
 
     # ── LLM Configuration ─────────────────────────────────────────────────────
     # Provider choices: "groq", "ollama", "gemini", "anthropic"
@@ -84,6 +85,12 @@ class Settings(BaseSettings):
 
     # ── Batch Pipeline ────────────────────────────────────────────────────────
     batch_parallel_workers: int = 10         # max concurrent job tailoring threads per batch
+
+
+    @property
+    def resolved_database_url(self) -> str:
+        """Prefer the Supabase pooler URL when one is provided."""
+        return self.supabase_pooler_url.strip() or self.database_url
 
 
 @lru_cache(maxsize=1)

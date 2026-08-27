@@ -85,16 +85,17 @@ Required for startup:
 
 Recommended to set explicitly:
 
-1. `GOOGLE_REDIRECT_URI`
-2. `LLM_PROVIDER`
-3. `GROQ_API_KEY` or `GEMINI_API_KEY` or the LLM key you use
-4. `LANGCHAIN_TRACING_V2`
-5. `LANGCHAIN_PROJECT`
-6. `APIFY_ACTOR_ID`
-7. `MAX_AUTO_SENDS_PER_DAY`
-8. `REVIEW_LOOP_MAX_ATTEMPTS`
-9. `SCHEDULER_ENABLED`
-10. `SCHEDULER_INTERVAL_HOURS`
+1. `SUPABASE_POOLER_URL`
+2. `GOOGLE_REDIRECT_URI`
+3. `LLM_PROVIDER`
+4. `GROQ_API_KEY` or `GEMINI_API_KEY` or the LLM key you use
+5. `LANGCHAIN_TRACING_V2`
+6. `LANGCHAIN_PROJECT`
+7. `APIFY_ACTOR_ID`
+8. `MAX_AUTO_SENDS_PER_DAY`
+9. `REVIEW_LOOP_MAX_ATTEMPTS`
+10. `SCHEDULER_ENABLED`
+11. `SCHEDULER_INTERVAL_HOURS`
 
 ### The important backend URL values
 
@@ -253,21 +254,22 @@ https://voxyl-resume.netlify.app
 ### Database setup checklist
 
 1. Make sure `DATABASE_URL` is the Supabase connection string.
-2. Prefer the Supabase pooler URL on Render, for example:
+2. Prefer the Supabase pooler URL on Render, and put it in `SUPABASE_POOLER_URL`.
+3. Example pooler URL:
 
 ```text
 postgresql+asyncpg://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
 ```
 
-3. Avoid the direct `db.<project-ref>.supabase.co` host on Render if you hit network errors.
-4. Make sure the backend can reach the database from Render.
-5. Keep migrations available.
-6. Run migrations once on the production database if needed.
+4. Avoid the direct `db.<project-ref>.supabase.co` host on Render if you hit network errors.
+5. Make sure the backend can reach the database from Render.
+6. Keep migrations available.
+7. Run migrations once on the production database if needed.
 
 ### If you see `Network is unreachable`
 
 1. Check whether `DATABASE_URL` points to the direct Supabase host instead of the pooler host.
-2. If it does, switch to the pooler connection string in Render and redeploy.
+2. Put the pooler URL into `SUPABASE_POOLER_URL` in Render and redeploy.
 3. If the URL is already the pooler URL, verify the password and region, then retry after redeploy.
 4. A `404` on `/` is normal here because the app exposes `/health` rather than a homepage route.
 

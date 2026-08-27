@@ -83,7 +83,8 @@ async def lifespan(app: FastAPI):
         import app.models  # noqa: F401
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            if "postgresql" in settings.database_url or "asyncpg" in settings.database_url:
+            database_url = settings.resolved_database_url
+            if "postgresql" in database_url or "asyncpg" in database_url:
                 # Ensure enums exist
                 await conn.execute(text("DO $$ BEGIN CREATE TYPE applied_status_enum AS ENUM ('no', 'yes', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;"))
                 await conn.execute(text("DO $$ BEGIN CREATE TYPE application_mode_enum AS ENUM ('auto', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;"))
@@ -131,7 +132,7 @@ async def lifespan(app: FastAPI):
                 await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_qualified BOOLEAN DEFAULT TRUE;"))
                 await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_score INTEGER;"))
                 await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filter_reason TEXT;"))
-        log.info("database_connected_and_tables_ready", url=settings.database_url.split("@")[-1])
+        log.info("database_connected_and_tables_ready", url=settings.resolved_database_url.split("@")[-1])
     except Exception as exc:
         log.error("database_connection_failed", error=str(exc))
         # Don't crash startup — the health check will surface the error.

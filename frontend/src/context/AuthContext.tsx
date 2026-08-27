@@ -9,7 +9,6 @@ interface AuthContextType {
   loginWithGoogle: () => void;
   logout: () => Promise<void>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
-  devMockLogin: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -88,35 +87,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const devMockLogin = async () => {
-    try {
-      setIsLoading(true);
-      const devUser = await authApi.devLogin();
-      setUser(devUser);
-      sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(devUser));
-    } catch {
-      // Fallback
-      const fallbackUser: User = {
-        id: 1,
-        email: "dev@autopilot.ai",
-        name: "Developer Candidate",
-        preferred_name: "Developer Candidate",
-        preferred_roles: ["AI Engineer"],
-        preferred_countries: ["US"],
-        github_url: null,
-        portfolio_url: null,
-        linkedin_url: null,
-        profile_completed: false,
-        send_mode: "manual",
-        has_google_token: true,
-      };
-      setUser(fallbackUser);
-      sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(fallbackUser));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -126,7 +96,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         logout,
         setUser,
-        devMockLogin,
       }}
     >
       {children}

@@ -19,10 +19,6 @@ export const authApi = {
   getLoginUrl: (): string => {
     return `${API_BASE_URL}/auth/google/login`;
   },
-  devLogin: async (): Promise<User> => {
-    const response = await apiClient.post<User>('/auth/dev-login');
-    return response.data;
-  },
   updateProfile: async (payload: UserProfileUpdate): Promise<User> => {
     const response = await apiClient.patch<User>('/auth/profile', payload);
     return response.data;

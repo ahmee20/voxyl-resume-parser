@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export const AuthWall: React.FC = () => {
-  const { loginWithGoogle, devMockLogin } = useAuth();
+  const { loginWithGoogle } = useAuth();
 
   return (
     <div id="auth-wall" className="flex min-h-[72vh] items-start justify-center px-4 py-6 sm:py-8">
@@ -73,12 +73,6 @@ export const AuthWall: React.FC = () => {
                 Continue with Google
               </button>
 
-              <button
-                onClick={devMockLogin}
-                className="w-full rounded-full bg-white/80 px-5 py-3 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-primary-600"
-              >
-                Development quick access
-              </button>
             </div>
           </div>
         </section>

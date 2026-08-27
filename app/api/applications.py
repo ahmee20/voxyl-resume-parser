@@ -432,10 +432,10 @@ async def run_single_job_pipeline(
     # 1. Resolve active user_id
     resolved_user_id = payload.user_id
     if not resolved_user_id:
-        stmt = select(User).order_by(User.id.asc())
-        res = await db.execute(stmt)
-        first_user = res.scalars().first()
-        resolved_user_id = first_user.id if first_user else 1
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated. Please log in with Google.",
+        )
 
     stmt = select(User).where(User.id == resolved_user_id)
     user_res = await db.execute(stmt)
@@ -575,10 +575,10 @@ async def run_batch_job_pipeline(
     # 1. Resolve active user_id
     resolved_user_id = payload.user_id
     if not resolved_user_id:
-        stmt = select(User).order_by(User.id.asc())
-        res = await db.execute(stmt)
-        first_user = res.scalars().first()
-        resolved_user_id = first_user.id if first_user else 1
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated. Please log in with Google.",
+        )
 
     stmt = select(User).where(User.id == resolved_user_id)
     user_res = await db.execute(stmt)

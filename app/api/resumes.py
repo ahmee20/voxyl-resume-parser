@@ -58,27 +58,15 @@ async def upload_resume(
             detail="Only .pdf and .docx file formats are supported.",
         )
 
-    # 1. Resolve active user_id from query, session, or database
+    # 1. Resolve active user_id from query or session
     resolved_user_id = user_id or request.session.get("user_id")
 
     try:
         if not resolved_user_id:
-            stmt = select(User).order_by(User.id.asc())
-            res = await db.execute(stmt)
-            first_user = res.scalars().first()
-
-            if first_user:
-                resolved_user_id = first_user.id
-            else:
-                new_user = User(
-                    google_sub="local-default-sub",
-                    email="user@autopilot.ai",
-                    name="Autopilot Candidate",
-                )
-                db.add(new_user)
-                await db.commit()
-                await db.refresh(new_user)
-                resolved_user_id = new_user.id
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated. Please log in with Google.",
+            )
 
         stmt_user = select(User).where(User.id == resolved_user_id)
         res_user = await db.execute(stmt_user)

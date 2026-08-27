@@ -103,32 +103,6 @@ async def get_current_user(
     return user
 
 
-@router.post("/dev-login", response_model=UserResponse, summary="Development Quick-Access login")
-async def dev_login(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Create or get a development test user and set the session cookie."""
-    stmt = select(User).where(User.email == "dev@autopilot.ai")
-    res = await db.execute(stmt)
-    user = res.scalar_one_or_none()
-
-    if not user:
-        user = User(
-            google_sub="dev-quick-access-sub",
-            email="dev@autopilot.ai",
-            name="Developer Candidate",
-            send_mode=SendMode.manual,
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-
-    request.session["user_id"] = user.id
-    request.session["user_email"] = user.email
-    return user
-
-
 @router.get("/google/login", summary="Initiate Google OAuth login")
 async def google_login(request: Request):
     """Redirect to Google OAuth consent screen requesting offline access."""
@@ -196,15 +170,6 @@ async def google_callback(
             log.error("direct_token_exchange_failed", error=str(direct_err))
 
     if not user_info or "sub" not in user_info:
-        # Fallback to dev login if OAuth failed in local development
-        stmt = select(User).order_by(User.id.asc())
-        res = await db.execute(stmt)
-        first_user = res.scalars().first()
-        if first_user:
-            request.session["user_id"] = first_user.id
-            request.session["user_email"] = first_user.email
-            return RedirectResponse(url="http://localhost:5173/", status_code=status.HTTP_302_FOUND)
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to retrieve user profile from Google OAuth. Please try again.",

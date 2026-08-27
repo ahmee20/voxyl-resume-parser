@@ -148,15 +148,16 @@ async def list_jobs(
     - latest=false: returns all discovered jobs till date with offset/limit pagination
     - qualified=true/false: optionally filters by match status
     """
-    # 1. Resolve active user_id (query param -> session cookie -> fallback first user)
+    # 1. Resolve active user_id (query param -> session cookie)
     resolved_user_id = user_id
     if not resolved_user_id and request:
         resolved_user_id = request.session.get("user_id")
 
     if not resolved_user_id:
-        stmt_user = select(User.id).order_by(User.id.asc()).limit(1)
-        res_user = await db.execute(stmt_user)
-        resolved_user_id = res_user.scalar_one_or_none() or 1
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated. Please log in with Google.",
+        )
 
     # 2. Build user-scoped query
     latest_app_subquery = (

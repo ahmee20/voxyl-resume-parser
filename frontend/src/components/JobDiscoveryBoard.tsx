@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Job, Resume } from '../types/api';
 import { jobsApi, applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -109,6 +109,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const [runningJobId, setRunningJobId] = useState<number | null>(null);
   const [hasSessionSnapshot, setHasSessionSnapshot] = useState<boolean>(false);
   const [showTailorNotice, setShowTailorNotice] = useState<boolean>(false);
+  const selectedCountriesRef = useRef(selectedCountries);
 
   const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
 
@@ -152,34 +153,9 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     return true;
   }, [readCache, user?.preferred_countries]);
 
-  // Keep the current session state in sync with the active user and cache.
   useEffect(() => {
-    if (!user?.id) {
-      return;
-    }
-
-    const hydrated = hydrateFromCache();
-    if (hydrated) {
-      return;
-    }
-
-    if (latestOnly) {
-      if (user?.preferred_countries?.length) {
-        setSelectedCountries(user.preferred_countries.slice(0, 3));
-      } else {
-        setSelectedCountries(['REMOTE', 'US']);
-      }
-      return;
-    }
-
-    if (user?.preferred_countries?.length) {
-      setSelectedCountries(user.preferred_countries.slice(0, 3));
-    } else {
-      setSelectedCountries(['REMOTE', 'US']);
-    }
-
-    void handleLoadJobs();
-  }, [handleLoadJobs, hydrateFromCache, latestOnly, user?.id, user?.preferred_countries]);
+    selectedCountriesRef.current = selectedCountries;
+  }, [selectedCountries]);
 
   useEffect(() => {
     if (!user?.id || !hasSessionSnapshot) {
@@ -238,7 +214,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     }
   };
 
-  async function handleLoadJobs() {
+  const handleLoadJobs = useCallback(async () => {
     if (!user) return;
 
     const cached = readCache();
@@ -257,13 +233,42 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       const untailored = filterUntailoredJobs(data);
       setJobs(untailored);
       setHasSessionSnapshot(true);
-      persistCache(untailored, discoveryStats, selectedCountries);
+      persistCache(untailored, discoveryStats, selectedCountriesRef.current);
     } catch {
       // ignore
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [discoveryStats, hydrateFromCache, latestOnly, persistCache, readCache, user]);
+
+  // Keep the current session state in sync with the active user and cache.
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    const hydrated = hydrateFromCache();
+    if (hydrated) {
+      return;
+    }
+
+    if (latestOnly) {
+      if (user?.preferred_countries?.length) {
+        setSelectedCountries(user.preferred_countries.slice(0, 3));
+      } else {
+        setSelectedCountries(['REMOTE', 'US']);
+      }
+      return;
+    }
+
+    if (user?.preferred_countries?.length) {
+      setSelectedCountries(user.preferred_countries.slice(0, 3));
+    } else {
+      setSelectedCountries(['REMOTE', 'US']);
+    }
+
+    void handleLoadJobs();
+  }, [handleLoadJobs, hydrateFromCache, latestOnly, user?.id, user?.preferred_countries]);
 
   const handleBatchTailor = async () => {
     if (!user || !activeResume || selectedJobIds.length === 0) return;

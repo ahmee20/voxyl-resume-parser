@@ -19,10 +19,9 @@ from typing import Any, Optional
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import String, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.agent.nodes.analyze_gaps import analyze_gaps_node
 from app.agent.nodes.tailor_resume import tailor_resume_node
@@ -81,16 +80,16 @@ class ApplicationDetailResponse(BaseModel):
     job_description: Optional[str] = None
     job_recruiter_email: Optional[str] = None
     job_apollo_enrichment: Optional[dict[str, Any]] = None
-    applied_status: AppliedStatus
-    mode: ApplicationMode
-    status: ApplicationStatus
+    applied_status: str
+    mode: str
+    status: str
     pdf_url: Optional[str] = None
     email_draft: Optional[str] = None
     tailored_html: Optional[str] = None
     ats_score: Optional[int] = None
     gap_analysis: Optional[str] = None
     approval_attempts: int = 1
-    timeline: list[AgentRunResponse] = []
+    timeline: list[AgentRunResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -108,12 +107,10 @@ def _user_profile_payload(user: User | None) -> dict[str, str | None]:
     }
 
 
-def _effective_application_status(application: Application) -> str:
-    raw_status = application.status.value if hasattr(application.status, "value") else str(application.status)
-    has_assets = bool(application.tailored_html or application.rendered_pdf_url or application.email_draft)
+def _effective_application_status(raw_status: str | None, has_assets: bool) -> str:
     if raw_status == "tailoring" and has_assets:
         return "saved"
-    return raw_status
+    return raw_status or "discovered"
 
 
 # ── Background pipeline runner ───────────────────────────────────────────────
@@ -620,9 +617,35 @@ async def get_application_details(
     db: AsyncSession = Depends(get_db),
 ):
     """Retrieve full application details, linked job, tailored assets, and observability timeline."""
-    stmt = select(Application).options(selectinload(Application.job)).where(Application.id == application_id)
+    stmt = (
+        select(
+            Application.id.label("id"),
+            Application.user_id.label("user_id"),
+            Application.job_id.label("job_id"),
+            Application.resume_id.label("resume_id"),
+            cast(Application.applied_status, String).label("applied_status"),
+            cast(Application.mode, String).label("mode"),
+            cast(Application.status, String).label("status"),
+            Application.rendered_pdf_url.label("rendered_pdf_url"),
+            Application.drive_folder_url.label("drive_folder_url"),
+            Application.tailored_html.label("tailored_html"),
+            Application.ats_score.label("ats_score"),
+            Application.gap_analysis.label("gap_analysis"),
+            Application.email_draft.label("email_draft"),
+            Application.approval_attempts.label("approval_attempts"),
+            Job.title.label("job_title"),
+            Job.company.label("job_company"),
+            Job.url.label("job_url"),
+            Job.description.label("job_description"),
+            Job.recruiter_email.label("job_recruiter_email"),
+            Job.apollo_enrichment.label("job_apollo_enrichment"),
+        )
+        .select_from(Application)
+        .outerjoin(Job, Job.id == Application.job_id)
+        .where(Application.id == application_id)
+    )
     result = await db.execute(stmt)
-    app_record = result.scalar_one_or_none()
+    app_record = result.mappings().first()
 
     if not app_record:
         raise HTTPException(
@@ -648,13 +671,13 @@ async def get_application_details(
                 "score": r.output.get("score", 85),
                 "feedback": ", ".join(r.output.get("flags", [])) if isinstance(r.output.get("flags"), list) else "Strong ATS alignment.",
             }
-        elif r.node_name == "draft_email" and app_record.email_draft:
+        elif r.node_name == "draft_email" and app_record["email_draft"]:
             snapshot["draft_email"] = {
                 "subject": f"Application for Role",
-                "body": app_record.email_draft,
+                "body": app_record["email_draft"],
             }
-        elif r.node_name == "render_pdf" and app_record.rendered_pdf_url:
-            snapshot["drive_folder_url"] = app_record.rendered_pdf_url
+        elif r.node_name == "render_pdf" and app_record["rendered_pdf_url"]:
+            snapshot["drive_folder_url"] = app_record["rendered_pdf_url"]
 
         formatted_timeline.append(
             {
@@ -668,25 +691,28 @@ async def get_application_details(
         )
 
     return {
-        "id": app_record.id,
-        "user_id": app_record.user_id,
-        "job_id": app_record.job_id,
-        "resume_id": app_record.resume_id,
-        "job_title": app_record.job.title if app_record.job else None,
-        "job_company": app_record.job.company if app_record.job else None,
-        "job_url": app_record.job.url if app_record.job else None,
-        "job_description": app_record.job.description if app_record.job else None,
-        "job_recruiter_email": app_record.job.recruiter_email if app_record.job else None,
-        "job_apollo_enrichment": app_record.job.apollo_enrichment if app_record.job else None,
-        "applied_status": app_record.applied_status.value,
-        "mode": app_record.mode.value,
-        "status": _effective_application_status(app_record),
-        "pdf_url": app_record.rendered_pdf_url or app_record.drive_folder_url,
-        "tailored_html": app_record.tailored_html,
-        "ats_score": app_record.ats_score,
-        "gap_analysis": app_record.gap_analysis,
-        "email_draft": app_record.email_draft,
-        "rendered_pdf_url": app_record.rendered_pdf_url,
-        "approval_attempts": app_record.approval_attempts,
+        "id": app_record["id"],
+        "user_id": app_record["user_id"],
+        "job_id": app_record["job_id"],
+        "resume_id": app_record["resume_id"],
+        "job_title": app_record["job_title"],
+        "job_company": app_record["job_company"],
+        "job_url": app_record["job_url"],
+        "job_description": app_record["job_description"],
+        "job_recruiter_email": app_record["job_recruiter_email"],
+        "job_apollo_enrichment": app_record["job_apollo_enrichment"],
+        "applied_status": app_record["applied_status"],
+        "mode": app_record["mode"],
+        "status": _effective_application_status(
+            app_record["status"],
+            bool(app_record["tailored_html"] or app_record["rendered_pdf_url"] or app_record["email_draft"]),
+        ),
+        "pdf_url": app_record["rendered_pdf_url"] or app_record["drive_folder_url"],
+        "tailored_html": app_record["tailored_html"],
+        "ats_score": app_record["ats_score"],
+        "gap_analysis": app_record["gap_analysis"],
+        "email_draft": app_record["email_draft"],
+        "rendered_pdf_url": app_record["rendered_pdf_url"],
+        "approval_attempts": app_record["approval_attempts"],
         "timeline": formatted_timeline,
     }

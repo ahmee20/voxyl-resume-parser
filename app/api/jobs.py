@@ -5,7 +5,7 @@ app/api/jobs.py — Job discovery and listing endpoints.
 from typing import Any, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, not_, or_, select
+from sqlalchemy import String, cast, func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -28,12 +28,10 @@ from app.services.resume_template import render_resume_html
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
-def _effective_application_status(application: Application) -> str:
-    raw_status = application.status.value if hasattr(application.status, "value") else str(application.status)
-    has_assets = bool(application.tailored_html or application.rendered_pdf_url or application.email_draft)
+def _effective_application_status(raw_status: str | None, has_assets: bool) -> str:
     if raw_status == "tailoring" and has_assets:
         return "saved"
-    return raw_status
+    return raw_status or "discovered"
 
 
 def _user_profile_payload(user: User | None) -> dict[str, str | None]:
@@ -89,20 +87,32 @@ class DiscoveryRequest(BaseModel):
     max_results: Optional[int] = None
 
 
-def _job_to_response(job: Job, latest_app: Application | None = None) -> JobResponse:
-    app = latest_app
+def _job_to_response(
+    job: Job,
+    application_id: int | None = None,
+    application_status: str | None = None,
+    application_applied_status: str | None = None,
+    application_tailored_html: str | None = None,
+    application_rendered_pdf_url: str | None = None,
+    application_email_draft: str | None = None,
+    application_ats_score: int | None = None,
+    application_gap_analysis: str | None = None,
+    application_approval_attempts: int | None = None,
+    application_drive_folder_url: str | None = None,
+) -> JobResponse:
     latest_app_summary = None
-    if app:
+    has_assets = bool(application_tailored_html or application_rendered_pdf_url or application_email_draft)
+    if application_id is not None:
         latest_app_summary = JobApplicationSummary(
-            id=app.id,
-            status=_effective_application_status(app),
-            applied_status=app.applied_status.value if hasattr(app.applied_status, "value") else str(app.applied_status),
-            pdf_url=app.rendered_pdf_url or app.drive_folder_url,
-            email_draft=app.email_draft,
-            tailored_html=app.tailored_html,
-            ats_score=app.ats_score,
-            gap_analysis=app.gap_analysis,
-            approval_attempts=app.approval_attempts or 1,
+            id=application_id,
+            status=_effective_application_status(application_status, has_assets),
+            applied_status=application_applied_status or "no",
+            pdf_url=application_rendered_pdf_url or application_drive_folder_url,
+            email_draft=application_email_draft,
+            tailored_html=application_tailored_html,
+            ats_score=application_ats_score,
+            gap_analysis=application_gap_analysis,
+            approval_attempts=application_approval_attempts or 1,
         )
 
     return JobResponse(
@@ -127,12 +137,12 @@ def _latest_application_is_tailored(application_alias: Any) -> Any:
         application_alias.tailored_html.is_not(None),
         application_alias.rendered_pdf_url.is_not(None),
         application_alias.email_draft.is_not(None),
-        application_alias.status.in_(
+        cast(application_alias.status, String).in_(
             [
-                ApplicationStatus.saved,
-                ApplicationStatus.pending_approval,
-                ApplicationStatus.approved,
-                ApplicationStatus.sent,
+                ApplicationStatus.saved.value,
+                ApplicationStatus.pending_approval.value,
+                ApplicationStatus.approved.value,
+                ApplicationStatus.sent.value,
             ]
         ),
     )
@@ -176,7 +186,19 @@ async def list_jobs(
     )
     latest_app_alias = aliased(Application)
     stmt = (
-        select(Job, latest_app_alias)
+        select(
+            Job,
+            latest_app_alias.id.label("application_id"),
+            cast(latest_app_alias.status, String).label("application_status"),
+            cast(latest_app_alias.applied_status, String).label("application_applied_status"),
+            latest_app_alias.tailored_html.label("application_tailored_html"),
+            latest_app_alias.rendered_pdf_url.label("application_rendered_pdf_url"),
+            latest_app_alias.email_draft.label("application_email_draft"),
+            latest_app_alias.ats_score.label("application_ats_score"),
+            latest_app_alias.gap_analysis.label("application_gap_analysis"),
+            latest_app_alias.approval_attempts.label("application_approval_attempts"),
+            latest_app_alias.drive_folder_url.label("application_drive_folder_url"),
+        )
         .outerjoin(latest_app_subquery, Job.id == latest_app_subquery.c.job_id)
         .outerjoin(latest_app_alias, latest_app_alias.id == latest_app_subquery.c.max_application_id)
         .where(Job.user_id == resolved_user_id)
@@ -207,8 +229,22 @@ async def list_jobs(
     rows = result.all()
 
     response_items = []
-    for job, latest_app in rows:
-        response_items.append(_job_to_response(job, latest_app))
+    for row in rows:
+        response_items.append(
+            _job_to_response(
+                row[0],
+                application_id=row[1],
+                application_status=row[2],
+                application_applied_status=row[3],
+                application_tailored_html=row[4],
+                application_rendered_pdf_url=row[5],
+                application_email_draft=row[6],
+                application_ats_score=row[7],
+                application_gap_analysis=row[8],
+                application_approval_attempts=row[9],
+                application_drive_folder_url=row[10],
+            )
+        )
 
     return response_items
 

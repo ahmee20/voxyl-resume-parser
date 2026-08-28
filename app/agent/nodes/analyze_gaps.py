@@ -26,9 +26,11 @@ Your goal is to compare a candidate's base resume against a specific target Job 
 
 CRITICAL GUARDRAIL & ETHICAL CONSTRAINT:
 - You must NEVER invent, fabricate, or hallucinate credentials, degrees, employers, skills, or experience that the candidate does not have.
-- A keyword may only be added if you can quote the EXACT phrase or sentence from the base resume that supports it. If you cannot point to specific text, the keyword does not belong in added_keywords, no exceptions.
-- "Directly implied" does NOT mean "same general domain" or "adjacent skill." Working with LLMs is not evidence of model benchmarking. Building a RAG pipeline is not evidence of supervised fine-tuning. Do not infer a specific skill, tool, or methodology from a related-but-different one, even if they share the word "AI" or "LLM."
-- If the JD requires a skill/tool/methodology that is absent from the resume, that gap is real. Do not paper over it by adding a nearby-sounding keyword. It is correct and expected for added_keywords to be short or empty when the candidate's real experience is a genuine mismatch for the role.
+- `added_keywords` should contain JD-relevant keywords that can be safely and credibly introduced into the resume because the resume shows supporting evidence for the underlying capability.
+- The added keyword itself may be a newer or adjacent term, as long as the resume gives clear support for the domain.
+- Example: if the resume mentions a "deep learning project", it is valid to recommend `PyTorch` or `TensorFlow` when the JD asks for those frameworks.
+- Example: if the resume mentions `LangSmith`, it is valid to recommend `evaluation`, `tracing`, and `observability` when those terms help align with the JD.
+- Do not invent a capability that the resume does not support at all. If the JD requires something completely absent, put it in notes.
 - When in doubt, leave it out and flag the uncertainty in notes instead.
 
 Return STRICT JSON only with this schema:
@@ -70,6 +72,95 @@ def _extract_json(text: str) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _norm_text(text: str) -> str:
+    return re.sub(r"\s+", " ", text.lower()).strip()
+
+
+def _has_any(text: str, patterns: list[str]) -> bool:
+    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
+
+
+def _find_evidence(resume_text: str, phrases: list[str], fallback: str) -> str:
+    for phrase in phrases:
+        match = re.search(phrase, resume_text, flags=re.IGNORECASE)
+        if match:
+            return match.group(0)
+    return fallback
+
+
+def _normalize_added_keywords(items: object) -> tuple[list[dict[str, str]], set[str]]:
+    normalized: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    if not isinstance(items, list):
+        return normalized, seen
+
+    for item in items:
+        keyword = ""
+        evidence = ""
+        if isinstance(item, str):
+            keyword = item.strip()
+        elif isinstance(item, dict):
+            keyword = str(item.get("keyword", "")).strip()
+            evidence = str(item.get("evidence", "")).strip()
+        if not keyword:
+            continue
+        key = keyword.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(
+            {
+                "keyword": keyword,
+                "evidence": evidence or keyword,
+            }
+        )
+
+    return normalized, seen
+
+
+def _add_keyword(
+    items: list[dict[str, str]],
+    seen: set[str],
+    keyword: str,
+    evidence: str,
+) -> None:
+    key = keyword.strip().lower()
+    if not key or key in seen:
+        return
+    items.append({"keyword": keyword.strip(), "evidence": evidence.strip() or keyword.strip()})
+    seen.add(key)
+
+
+def _augment_keywords(parsed: dict, resume_text: str, job_description: str) -> dict:
+    added_keywords, seen = _normalize_added_keywords(parsed.get("added_keywords"))
+    resume_norm = _norm_text(resume_text)
+    jd_norm = _norm_text(job_description)
+
+    if _has_any(resume_norm, [r"\bdeep learning\b", r"\bneural network\b", r"\bcomputer vision\b"]) and _has_any(
+        jd_norm, [r"\bpytorch\b", r"\btensorflow\b", r"\bdeep learning\b", r"\bneural network\b", r"\bml\b", r"\bmachine learning\b"]
+    ):
+        evidence = _find_evidence(resume_text, [r"deep learning", r"neural network", r"computer vision"], "deep learning")
+        _add_keyword(added_keywords, seen, "PyTorch", evidence)
+        _add_keyword(added_keywords, seen, "TensorFlow", evidence)
+
+    if _has_any(resume_norm, [r"\blangsmith\b"]):
+        evidence = _find_evidence(resume_text, [r"LangSmith"], "LangSmith")
+        _add_keyword(added_keywords, seen, "evaluation", evidence)
+        _add_keyword(added_keywords, seen, "tracing", evidence)
+        _add_keyword(added_keywords, seen, "observability", evidence)
+
+    if _has_any(resume_norm, [r"\blangchain\b", r"\bllm\b", r"\brag\b", r"\bagentic\b", r"\bai agent\b"]) and _has_any(
+        jd_norm, [r"\bevaluation\b", r"\btracing\b", r"\bobservability\b", r"\bllmops\b", r"\bprompt engineering\b"]
+    ):
+        evidence = _find_evidence(resume_text, [r"LangChain", r"LLM", r"RAG", r"agentic", r"AI agent"], "LLM systems work")
+        _add_keyword(added_keywords, seen, "evaluation", evidence)
+        _add_keyword(added_keywords, seen, "tracing", evidence)
+
+    parsed["added_keywords"] = added_keywords
+    return parsed
+
+
 def run_gap_analysis(resume_text: str, job_description: str) -> str:
     """Invoke LLM to perform grounded gap analysis."""
     llm = get_llm(temperature=0.0)
@@ -91,6 +182,7 @@ def run_gap_analysis(resume_text: str, job_description: str) -> str:
     raw = str(content).strip()
     parsed = _extract_json(raw)
     if parsed is not None:
+        parsed = _augment_keywords(parsed, resume_text, job_description)
         return json.dumps(parsed, ensure_ascii=False)
     return raw
 

@@ -31,12 +31,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
 
   return (
     <header className="sticky top-0 sm:top-4 z-40 w-full px-2 pt-2 sm:px-6 sm:pt-0">
-      <div className="site-shell flex flex-col gap-2 overflow-hidden rounded-[24px] sm:rounded-full bg-white/88 p-2 shadow-[0_10px_26px_rgba(18,32,26,0.04)] backdrop-blur-xl border border-white/60">
+      <div className="site-shell flex flex-col gap-2 overflow-visible rounded-[24px] sm:rounded-full bg-white/88 p-2 shadow-[0_10px_26px_rgba(18,32,26,0.04)] backdrop-blur-xl border border-white/60">
         <div className="flex w-full items-center justify-between gap-2">
           {/* Logo */}
           <button
             type="button"
-            onClick={() => user ? setActiveTab('dashboard') : undefined}
+            onClick={() => (user ? setActiveTab('dashboard') : undefined)}
             className="flex min-w-0 items-center gap-2 sm:gap-3 shrink-0"
             aria-label="Voxyl home"
           >
@@ -69,7 +69,9 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           {user ? (
             <div className="relative shrink-0" ref={menuRef}>
               <button
+                type="button"
                 onClick={() => setMenuOpen((open) => !open)}
+                aria-expanded={menuOpen}
                 className="flex items-center gap-1.5 rounded-full border border-border/50 bg-white/90 px-2 py-1.5 text-slate-600 transition-colors hover:text-primary-600 sm:gap-2 sm:px-2.5 sm:py-2"
                 title="Account menu"
               >
@@ -83,11 +85,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-2xl border border-border bg-white shadow-[0_12px_24px_rgba(18,32,26,0.08)] z-50">
+                <div className="absolute right-0 top-full mt-2 w-48 overflow-hidden rounded-2xl border border-border bg-white shadow-[0_12px_24px_rgba(18,32,26,0.08)] z-50">
                   <div className="px-4 py-2.5 border-b border-border text-xs text-slate-500 truncate">
                     {user.email}
                   </div>
                   <button
+                    type="button"
                     onClick={() => {
                       setActiveTab('profile');
                       setMenuOpen(false);
@@ -98,6 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
                     Profile &amp; Settings
                   </button>
                   <button
+                    type="button"
                     onClick={async () => {
                       await logout();
                       setMenuOpen(false);

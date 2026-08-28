@@ -2,6 +2,7 @@
 tests/test_applications.py — Tests for the single-job tailoring pipeline and applications API.
 """
 
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from httpx import AsyncClient
@@ -34,6 +35,42 @@ async def test_analyze_gaps_node_updates_state():
 
         updated = analyze_gaps_node(state)
         assert updated["gap_analysis"] == mock_analysis
+
+
+@pytest.mark.asyncio
+async def test_analyze_gaps_node_expands_supported_keywords():
+    state: GraphState = {
+        "application_id": 1,
+        "resume_text": "Built a deep learning project and worked with LangSmith while developing LLM workflows.",
+        "current_job": {
+            "title": "ML Engineer",
+            "company": "Tech Corp",
+            "description": "Looking for PyTorch, TensorFlow, evaluation, tracing, and observability experience.",
+        },
+    }
+
+    mock_analysis = json.dumps(
+        {
+            "added_keywords": [],
+            "removed_keywords": [],
+            "summary": "Focus on the strongest technical keywords.",
+            "notes": [],
+        }
+    )
+
+    with patch("app.agent.nodes.analyze_gaps.get_llm") as mock_get_llm:
+        mock_chat = MagicMock()
+        mock_chat.invoke.return_value = MagicMock(content=mock_analysis)
+        mock_get_llm.return_value = mock_chat
+
+        updated = analyze_gaps_node(state)
+        parsed = json.loads(updated["gap_analysis"])
+
+        added_keywords = {item["keyword"] for item in parsed["added_keywords"]}
+        assert "PyTorch" in added_keywords
+        assert "TensorFlow" in added_keywords
+        assert "evaluation" in added_keywords
+        assert "tracing" in added_keywords
 
 
 @pytest.mark.asyncio
@@ -194,4 +231,3 @@ async def test_run_batch_job_pipeline_success(client: AsyncClient, db_session):
         assert data["status"] == "tailoring"
         assert data["count"] == 2
         assert data["job_ids"] == [job1.id, job2.id]
-

@@ -42,21 +42,56 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
   onRefreshJobs,
   onClose,
 }) => {
-  const [detail, setDetail] = useState<ApplicationDetail | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<ModalTab>('changes');
-  const [copiedEmail, setCopiedEmail] = useState(false);
   const resolvedApplicationId =
     typeof applicationId === 'number' && Number.isFinite(applicationId) && applicationId > 0
       ? applicationId
       : null;
 
-  const fetchDetail = async () => {
+  const cacheKey = resolvedApplicationId ? `voxyl.app_detail.${resolvedApplicationId}` : null;
+
+  const [detail, setDetail] = useState<ApplicationDetail | null>(() => {
+    if (!resolvedApplicationId) return null;
+    try {
+      const raw = sessionStorage.getItem(`voxyl.app_detail.${resolvedApplicationId}`);
+      if (!raw) return null;
+      return JSON.parse(raw) as ApplicationDetail;
+    } catch {
+      return null;
+    }
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    if (!resolvedApplicationId) return false;
+    try {
+      return !sessionStorage.getItem(`voxyl.app_detail.${resolvedApplicationId}`);
+    } catch {
+      return true;
+    }
+  });
+  const [activeTab, setActiveTab] = useState<ModalTab>('changes');
+  const [copiedEmail, setCopiedEmail] = useState(false);
+
+  const fetchDetail = async (force = false) => {
     if (!resolvedApplicationId) return;
+    if (!force && cacheKey) {
+      try {
+        const raw = sessionStorage.getItem(cacheKey);
+        if (raw) {
+          const parsed = JSON.parse(raw) as ApplicationDetail;
+          setDetail(parsed);
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    }
     try {
       setIsLoading(true);
       const data = await applicationsApi.getApplication(resolvedApplicationId);
       setDetail(data);
+      if (cacheKey) {
+        sessionStorage.setItem(cacheKey, JSON.stringify(data));
+      }
     } catch {
       // ignore
     } finally {
@@ -70,7 +105,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
       setIsLoading(false);
       return;
     }
-    fetchDetail();
+    void fetchDetail(false);
   }, [resolvedApplicationId]);
 
   useEffect(() => {
@@ -79,12 +114,15 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
       try {
         const data = await applicationsApi.getApplication(resolvedApplicationId);
         setDetail(data);
+        if (cacheKey) {
+          sessionStorage.setItem(cacheKey, JSON.stringify(data));
+        }
       } catch {
         // ignore
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [detail?.status, resolvedApplicationId]);
+  }, [detail?.status, resolvedApplicationId, cacheKey]);
 
   const handleCopyEmail = () => {
     if (detail?.email_draft) {
@@ -188,7 +226,9 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchDetail}
+              onClick={() => {
+                void fetchDetail(true);
+              }}
               className="rounded-full border border-border bg-white p-2 text-slate-500 transition hover:border-primary-200 hover:text-primary-600"
               title="Refresh application status"
             >

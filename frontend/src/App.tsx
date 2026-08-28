@@ -272,7 +272,6 @@ const DashboardContent: React.FC = () => {
               suspendAutoRefresh={isApplicationSessionActive}
               onDiscoverySuccess={() => {
                 setShowLatestDashboardJobs(true);
-                setActiveTab('dashboard');
               }}
             />
           </div>

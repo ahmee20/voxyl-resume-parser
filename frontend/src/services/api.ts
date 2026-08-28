@@ -56,13 +56,15 @@ export const jobsApi = {
     limit = 50,
     offset = 0,
     latest?: boolean,
-    userId?: number
+    userId?: number,
+    tailored?: boolean
   ): Promise<Job[]> => {
     const response = await apiClient.get<Job[]>('/jobs', {
       params: {
         ...(qualified !== undefined ? { qualified } : {}),
         ...(latest ? { latest: true } : {}),
         ...(userId ? { user_id: userId } : {}),
+        ...(tailored !== undefined ? { tailored } : {}),
         limit,
         offset,
       },

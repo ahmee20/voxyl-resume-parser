@@ -209,7 +209,7 @@ async def test_jobs_api_endpoints(client: AsyncClient, db_session):
         assert len(data["persisted_job_ids"]) >= 1
 
         # 3. Test GET /jobs?qualified=true
-        list_res = await client.get("/jobs?qualified=true")
+        list_res = await client.get(f"/jobs?qualified=true&user_id={user.id}")
         assert list_res.status_code == 200
         jobs_list = list_res.json()
         assert len(jobs_list) >= 1
@@ -393,3 +393,91 @@ async def test_user_isolated_jobs_and_latest_filtering(client: AsyncClient, db_s
     assert len(jobs_latest) == 2
     assert jobs_latest[0]["title"] == "Role A3"
 
+
+@pytest.mark.asyncio
+async def test_jobs_api_tailored_and_untailored_filters(client: AsyncClient, db_session):
+    from app.models.application import Application, ApplicationMode, ApplicationStatus, AppliedStatus
+
+    user = User(google_sub="sub-job-filters-1", email="filters@test.com", name="Filters User")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+
+    resume = Resume(
+        user_id=user.id,
+        version=1,
+        source_text="Python engineer with strong product delivery experience.",
+        source_html='<div class="resume">Filter User</div>',
+        is_base=True,
+    )
+    db_session.add(resume)
+    await db_session.commit()
+    await db_session.refresh(resume)
+
+    tailored_job = Job(
+        user_id=user.id,
+        source="apify",
+        url="https://jobs.example.com/tailored-job",
+        title="Tailored Role",
+        company="Tailored Corp",
+        description="Already tailored role.",
+        is_qualified=True,
+    )
+    untailored_job = Job(
+        user_id=user.id,
+        source="apify",
+        url="https://jobs.example.com/untailored-job",
+        title="Untailored Role",
+        company="Untailored Corp",
+        description="Fresh untailored role.",
+        is_qualified=True,
+    )
+    processing_job = Job(
+        user_id=user.id,
+        source="apify",
+        url="https://jobs.example.com/processing-job",
+        title="Processing Role",
+        company="Processing Corp",
+        description="In progress role.",
+        is_qualified=True,
+    )
+    db_session.add_all([tailored_job, untailored_job, processing_job])
+    await db_session.commit()
+    await db_session.refresh(tailored_job)
+    await db_session.refresh(untailored_job)
+    await db_session.refresh(processing_job)
+
+    tailored_app = Application(
+        user_id=user.id,
+        job_id=tailored_job.id,
+        resume_id=resume.id,
+        applied_status=AppliedStatus.manual,
+        mode=ApplicationMode.manual,
+        status=ApplicationStatus.saved,
+        tailored_html='<div class="resume">Tailored</div>',
+        rendered_pdf_url="https://example.com/tailored.pdf",
+        email_draft="Subject: Ready",
+    )
+    processing_app = Application(
+        user_id=user.id,
+        job_id=processing_job.id,
+        resume_id=resume.id,
+        applied_status=AppliedStatus.manual,
+        mode=ApplicationMode.manual,
+        status=ApplicationStatus.tailoring,
+    )
+    db_session.add_all([tailored_app, processing_app])
+    await db_session.commit()
+
+    tailored_res = await client.get(f"/jobs?user_id={user.id}&tailored=true")
+    assert tailored_res.status_code == 200
+    tailored_jobs = tailored_res.json()
+    assert [job["title"] for job in tailored_jobs] == ["Tailored Role"]
+
+    untailored_res = await client.get(f"/jobs?user_id={user.id}&tailored=false")
+    assert untailored_res.status_code == 200
+    untailored_jobs = untailored_res.json()
+    untailored_titles = {job["title"] for job in untailored_jobs}
+    assert "Tailored Role" not in untailored_titles
+    assert "Untailored Role" in untailored_titles
+    assert "Processing Role" in untailored_titles

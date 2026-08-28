@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Job, Resume } from '../types/api';
 import { jobsApi, applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -14,12 +14,9 @@ import {
   Layers,
   CheckCircle2,
   RefreshCw,
-  FileText,
   CheckSquare,
   Square
 } from 'lucide-react';
-
-const JOBS_CACHE_TTL_MS = 30 * 60 * 1000;
 
 interface JobDiscoveryBoardProps {
   activeResume: Resume | null;
@@ -30,6 +27,20 @@ interface JobDiscoveryBoardProps {
   onDiscoverySuccess?: () => void;
   suspendAutoRefresh?: boolean;
 }
+
+type DiscoveryStats = {
+  queries?: string[];
+  countries?: string[];
+  scraped?: number;
+  persisted?: number;
+};
+
+type DiscoveryCacheSnapshot = {
+  jobs?: Job[];
+  discoveryStats?: DiscoveryStats | null;
+  selectedCountries?: string[];
+  cachedAt?: number;
+};
 
 const AVAILABLE_COUNTRIES = [
   { code: 'REMOTE', name: 'Worldwide / Remote' },
@@ -50,213 +61,131 @@ const AVAILABLE_COUNTRIES = [
   { code: 'JP', name: 'Japan' },
 ];
 
-const hasTailoredAssets = (app?: Job['application']) =>
-  Boolean(app?.tailored_html || app?.pdf_url || app?.email_draft);
+/**
+ * Filter untailored jobs: only jobs without an active/completed application.
+ * Tailored jobs belong in the Applications section.
+ */
+const filterUntailoredJobs = (jobList: Job[]): Job[] => {
+  return jobList.filter((j) => !j.application);
+};
 
 export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   activeResume,
   onApplicationStarted,
   latestOnly = false,
-  showLatestBatch = true,
+  showLatestBatch: _showLatestBatch = false,
   showLoadJobsButton = true,
   onDiscoverySuccess,
-  suspendAutoRefresh = false,
+  suspendAutoRefresh: _suspendAutoRefresh,
 }) => {
   const { user } = useAuth();
-  const suspendAutoRefreshRef = useRef(suspendAutoRefresh);
+  const cacheKey = useMemo(
+    () => (latestOnly ? `voxyl.discovery.jobs.${user?.id ?? 'guest'}` : `voxyl.jobs.untailored.${user?.id ?? 'guest'}`),
+    [latestOnly, user?.id]
+  );
+
+  const readCache = useCallback((): DiscoveryCacheSnapshot | null => {
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (!raw) return null;
+      return JSON.parse(raw) as DiscoveryCacheSnapshot;
+    } catch {
+      return null;
+    }
+  }, [cacheKey]);
+
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [discoveryStats, setDiscoveryStats] = useState<DiscoveryStats | null>(null);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(
+    user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : ['REMOTE', 'US']
+  );
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isDiscovering, setIsDiscovering] = useState<boolean>(false);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [inspectingJob, setInspectingJob] = useState<Job | null>(null);
   const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
+  const [runningJobId, setRunningJobId] = useState<number | null>(null);
+  const [hasSessionSnapshot, setHasSessionSnapshot] = useState<boolean>(false);
 
-  const [selectedCountries, setSelectedCountries] = useState<string[]>(
-    user?.preferred_countries?.length ? user.preferred_countries : ['REMOTE', 'US']
+  const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
+
+  const persistCache = useCallback(
+    (nextJobs: Job[], nextStats: DiscoveryStats | null, nextCountries: string[]) => {
+      try {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            jobs: nextJobs,
+            discoveryStats: nextStats,
+            selectedCountries: nextCountries,
+            cachedAt: Date.now(),
+          } satisfies DiscoveryCacheSnapshot)
+        );
+      } catch {
+        // ignore storage errors
+      }
+    },
+    [cacheKey]
   );
 
-  const [discoveryStats, setDiscoveryStats] = useState<{
-    queries?: string[];
-    countries?: string[];
-    scraped?: number;
-    persisted?: number;
-  } | null>(null);
-  const [runningJobId, setRunningJobId] = useState<number | null>(null);
-  const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
-  const allJobsCacheKey = `voxyl.jobs.cache.${user?.id ?? 'guest'}.all`;
-  const latestJobsCacheKey = `voxyl.jobs.cache.${user?.id ?? 'guest'}.latest`;
-  const cacheKey = latestOnly ? latestJobsCacheKey : allJobsCacheKey;
-  const defaultCountries = user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : ['REMOTE', 'US'];
+  const hydrateFromCache = useCallback(() => {
+    const cached = readCache();
+    if (!cached) {
+      setHasSessionSnapshot(false);
+      return false;
+    }
 
-  useEffect(() => {
-    suspendAutoRefreshRef.current = suspendAutoRefresh;
-  }, [suspendAutoRefresh]);
-
-  const persistCache = (nextJobs: Job[], nextStats: typeof discoveryStats, nextCountries: string[]) => {
-    sessionStorage.setItem(
-      cacheKey,
-      JSON.stringify({
-        jobs: nextJobs,
-        discoveryStats: nextStats,
-        selectedCountries: nextCountries,
-        cachedAt: Date.now(),
-      })
+    setJobs(filterUntailoredJobs(cached.jobs || []));
+    setDiscoveryStats(cached.discoveryStats || null);
+    setSelectedCountries(
+      cached.selectedCountries?.length
+        ? cached.selectedCountries.slice(0, 3)
+        : user?.preferred_countries?.length
+          ? user.preferred_countries.slice(0, 3)
+          : ['REMOTE', 'US']
     );
-  };
+    setSelectedJobIds([]);
+    setHasSessionSnapshot(true);
+    return true;
+  }, [readCache, user?.preferred_countries]);
 
-  const fetchJobs = async (force = false, statsOverride?: typeof discoveryStats) => {
-    try {
-      setIsLoading(true);
-      if ((suspendAutoRefresh && !force) || (latestOnly && !showLatestBatch && !force)) {
-        setJobs([]);
-        return;
-      }
-      if (latestOnly) {
-        if (!force) {
-          const cachedValue = sessionStorage.getItem(cacheKey);
-          if (cachedValue) {
-            try {
-              const parsed = JSON.parse(cachedValue) as {
-                jobs?: Job[];
-                discoveryStats?: typeof discoveryStats;
-                selectedCountries?: string[];
-                cachedAt?: number;
-              };
-              if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
-                setJobs(parsed.jobs ?? []);
-                setDiscoveryStats(parsed.discoveryStats ?? null);
-                if (parsed.selectedCountries?.length) {
-                  setSelectedCountries(parsed.selectedCountries.slice(0, 3));
-                }
-                return;
-              }
-            } catch {
-              sessionStorage.removeItem(cacheKey);
-            }
-          }
-        }
-
-        const data = await jobsApi.listJobs(undefined, 100, 0, true, user?.id);
-        setJobs(data);
-        persistCache(data, statsOverride ?? discoveryStats, selectedCountries);
-        return;
-      }
-      const limit = 100;
-      const data = await jobsApi.listJobs(undefined, limit, 0, latestOnly, user?.id);
-      setJobs(data);
-      persistCache(data, statsOverride ?? discoveryStats, selectedCountries);
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Keep the current session state in sync with the active user and cache.
   useEffect(() => {
-    const nextCountries = user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : defaultCountries;
-    setSelectedCountries(nextCountries);
-
-    if (latestOnly && !showLatestBatch) {
-      setJobs([]);
-      setDiscoveryStats(null);
-      setIsLoading(false);
+    if (!user?.id) {
       return;
     }
 
-    const cachedValue = sessionStorage.getItem(cacheKey);
+    const hydrated = hydrateFromCache();
+    if (hydrated) {
+      return;
+    }
+
     if (latestOnly) {
-      if (cachedValue) {
-        try {
-          const parsed = JSON.parse(cachedValue) as {
-            jobs?: Job[];
-            discoveryStats?: typeof discoveryStats;
-            selectedCountries?: string[];
-            cachedAt?: number;
-          };
-          if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
-            setJobs(parsed.jobs ?? []);
-            setDiscoveryStats(parsed.discoveryStats ?? null);
-            if (parsed.selectedCountries?.length) {
-              setSelectedCountries(parsed.selectedCountries.slice(0, 3));
-            }
-            setIsLoading(false);
-            return;
-          }
-        } catch {
-          sessionStorage.removeItem(cacheKey);
-        }
+      if (user?.preferred_countries?.length) {
+        setSelectedCountries(user.preferred_countries.slice(0, 3));
+      } else {
+        setSelectedCountries(['REMOTE', 'US']);
       }
-      if (!suspendAutoRefresh) {
-        setJobs([]);
-        setDiscoveryStats(null);
-      }
-      setIsLoading(false);
       return;
     }
 
-    if (cachedValue) {
-      try {
-        const parsed = JSON.parse(cachedValue) as {
-          jobs?: Job[];
-          discoveryStats?: typeof discoveryStats;
-          selectedCountries?: string[];
-          cachedAt?: number;
-        };
-        if (parsed.cachedAt && Date.now() - parsed.cachedAt < JOBS_CACHE_TTL_MS) {
-          setJobs(parsed.jobs ?? []);
-          setDiscoveryStats(parsed.discoveryStats ?? null);
-          if (parsed.selectedCountries?.length) {
-            setSelectedCountries(parsed.selectedCountries.slice(0, 3));
-          }
-          setIsLoading(false);
-          return;
-        }
-      } catch {
-        sessionStorage.removeItem(cacheKey);
-      }
+    if (user?.preferred_countries?.length) {
+      setSelectedCountries(user.preferred_countries.slice(0, 3));
+    } else {
+      setSelectedCountries(['REMOTE', 'US']);
     }
 
-    if (suspendAutoRefresh) {
-      setIsLoading(false);
-      return;
-    }
-
-    void fetchJobs();
-  }, [cacheKey, user?.id, latestOnly, showLatestBatch, suspendAutoRefresh]);
+    void handleLoadJobs();
+  }, [handleLoadJobs, hydrateFromCache, latestOnly, user?.id, user?.preferred_countries]);
 
   useEffect(() => {
+    if (!user?.id || !hasSessionSnapshot) {
+      return;
+    }
+
     persistCache(jobs, discoveryStats, selectedCountries);
-  }, [jobs, discoveryStats, selectedCountries, cacheKey]);
-
-  const startPolling = (durationSec = 30, intervalMs = 2500) => {
-    if (suspendAutoRefreshRef.current) {
-      return;
-    }
-
-    const startTime = Date.now();
-    const interval = setInterval(async () => {
-      if (Date.now() - startTime > durationSec * 1000) {
-        clearInterval(interval);
-        return;
-      }
-      if (suspendAutoRefreshRef.current) {
-        clearInterval(interval);
-        return;
-      }
-      await fetchJobs(true);
-    }, intervalMs);
-  };
-
-  const refreshAfterTailor = async (durationSec: number, intervalMs: number) => {
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-
-    if (suspendAutoRefreshRef.current) {
-      return;
-    }
-
-    await fetchJobs(true);
-    startPolling(durationSec, intervalMs);
-  };
+  }, [discoveryStats, hasSessionSnapshot, jobs, persistCache, selectedCountries, user?.id]);
 
   const toggleJobSelection = (jobId: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -266,13 +195,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   };
 
   const selectAllUntailored = () => {
-    const untailoredIds = jobs
-      .filter((j) => {
-        const app = j.application;
-        return !app || (!(app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent') && !hasTailoredAssets(app));
-      })
-      .map((j) => j.id);
-    setSelectedJobIds(untailoredIds);
+    setSelectedJobIds(jobs.map((j) => j.id));
   };
 
   const clearSelection = () => {
@@ -290,6 +213,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         countries: selectedCountries,
         resumeId: activeResume.id,
       });
+
       const nextStats = {
         queries: res.search_queries,
         countries: res.preferred_countries,
@@ -298,8 +222,12 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       };
       setDiscoveryStats(nextStats);
       setSelectedJobIds([]);
-      setJobs(res.jobs ?? []);
-      persistCache(res.jobs ?? [], nextStats, selectedCountries);
+
+      // Discover jobs strictly displays the freshly returned jobs from Apify that are not yet tailored
+      const untailored = filterUntailoredJobs(res.jobs ?? []);
+      setJobs(untailored);
+      setHasSessionSnapshot(true);
+      persistCache(untailored, nextStats, selectedCountries);
       onDiscoverySuccess?.();
     } catch {
       // ignore
@@ -308,14 +236,49 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     }
   };
 
+  async function handleLoadJobs() {
+    if (!user) return;
+
+    const cached = readCache();
+    if (cached) {
+      hydrateFromCache();
+      return;
+    }
+
+    if (latestOnly) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const data = await jobsApi.listJobs(undefined, 100, 0, false, user.id, false);
+      const untailored = filterUntailoredJobs(data);
+      setJobs(untailored);
+      setHasSessionSnapshot(true);
+      persistCache(untailored, discoveryStats, selectedCountries);
+    } catch {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   const handleBatchTailor = async () => {
     if (!user || !activeResume || selectedJobIds.length === 0) return;
 
     try {
       setIsBatchRunning(true);
       await applicationsApi.runBatch(selectedJobIds, activeResume.id, user.id);
+
+      // Once tailored, remove these jobs from the Jobs board immediately
+      const tailoredSet = new Set(selectedJobIds);
       setSelectedJobIds([]);
-      void refreshAfterTailor(180, 5000);
+      setJobs((prev) => {
+        const next = prev.filter((j) => !tailoredSet.has(j.id));
+        setHasSessionSnapshot(true);
+        persistCache(next, discoveryStats, selectedCountries);
+        return next;
+      });
     } catch {
       // ignore
     } finally {
@@ -324,33 +287,25 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   };
 
   const handleCardClick = (job: Job) => {
-    const app = job.application;
-    const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
-
-    if (isTailored && app) {
-      onApplicationStarted(app.id);
-    } else {
-      // Open Job Details Modal to inspect full description, recruiter info, and trigger tailoring
-      setInspectingJob(job);
-    }
+    setInspectingJob(job);
   };
 
   const handleSingleJobTailor = async (job: Job, e: React.MouseEvent) => {
     e.stopPropagation();
-    const app = job.application;
-    const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
-
-    if (isTailored && app) {
-      onApplicationStarted(app.id);
-      return;
-    }
-
     if (!activeResume) return;
     try {
       setRunningJobId(job.id);
       const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user?.id);
+
+      // Remove from Jobs page immediately so it only exists in Applications
+      setJobs((prev) => {
+        const next = prev.filter((j) => j.id !== job.id);
+        setHasSessionSnapshot(true);
+        persistCache(next, discoveryStats, selectedCountries);
+        return next;
+      });
+
       onApplicationStarted(res.application_id);
-      void refreshAfterTailor(180, 5000);
     } catch {
       // ignore
     } finally {
@@ -363,7 +318,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
   return (
     <div className="relative space-y-6 pb-20">
-      <div className="rounded-[34px] px-6 py-5 sm:px-7">
+      <div className="rounded-[34px] px-4 py-4 sm:px-7 sm:py-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
@@ -402,37 +357,35 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:min-w-[240px]">
+          <div className="flex flex-wrap gap-3 lg:min-w-[240px]">
             {showLoadJobsButton && (
               <button
-                onClick={() => fetchJobs(true)}
+                onClick={handleLoadJobs}
                 disabled={isLoading}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-white/70 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:bg-white/90 hover:text-primary-600"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-white/70 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:bg-white/90 hover:text-primary-600 disabled:opacity-50"
                 title="Load job listings"
               >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Load jobs
               </button>
             )}
-            {latestOnly && (
-              <button
-                onClick={handleDiscover}
-                disabled={!activeResume || isDiscovering}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-rose px-4 py-3 text-xs font-semibold text-white transition hover:bg-[#e36457] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isDiscovering ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Finding matches...
-                  </>
-                ) : (
-                  <>
-                    <Compass className="w-4 h-4" />
-                    Discover jobs
-                  </>
-                )}
-              </button>
-            )}
+            <button
+              onClick={handleDiscover}
+              disabled={!activeResume || isDiscovering}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-rose px-4 py-3 text-xs font-semibold text-white transition hover:bg-[#e36457] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDiscovering ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Finding matches...
+                </>
+              ) : (
+                <>
+                  <Compass className="w-4 h-4" />
+                  Discover jobs
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -448,13 +401,13 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
             <Briefcase className="w-4 h-4 text-primary-500" />
-            <span>{latestOnly ? 'Latest discovered opportunities' : 'All discovered jobs'}</span>
+            <span>Discovered opportunities</span>
             <span className="rounded-full border border-border bg-white/90 px-2 py-0.5 font-mono text-xs text-slate-500">
-              {jobs.length} {latestOnly ? 'in Latest Batch' : 'Total'}
+              {jobs.length} Available
             </span>
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Click a card to open the full job details, or select checkboxes to tailor several jobs at once.
+            Click a card to inspect details, or select checkboxes to tailor several jobs at once.
           </p>
         </div>
 
@@ -464,7 +417,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
               onClick={selectAllUntailored}
               className="rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-primary-200 hover:text-primary-600"
             >
-              Select All Untailored
+              Select All
             </button>
             {selectedJobIds.length > 0 && (
               <button
@@ -479,25 +432,17 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       </div>
 
       {/* Loading / Empty States */}
-      {latestOnly && !showLatestBatch ? (
-        <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
-          <Compass className="w-10 h-10 text-slate-400 mx-auto" />
-          <h4 className="text-sm font-semibold text-primary-600">No batch loaded yet</h4>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Use the dashboard discovery action to load the latest batch from your saved roles and countries.
-          </p>
-        </div>
-      ) : isLoading && jobs.length === 0 ? (
+      {isDiscovering ? (
         <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
           <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
-          <p className="text-xs text-slate-500">Loading job listings...</p>
+          <p className="text-xs text-slate-500">Discovering and enriching jobs from live postings...</p>
         </div>
       ) : jobs.length === 0 ? (
         <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
           <Compass className="w-10 h-10 text-slate-400 mx-auto" />
-          <h4 className="text-sm font-semibold text-primary-600">No jobs discovered yet</h4>
+          <h4 className="text-sm font-semibold text-primary-600">No active discovered jobs</h4>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Jobs will appear here after you load them from the dashboard.
+            Click "Discover jobs" to scrape matching opportunities based on your profile roles and countries.
           </p>
         </div>
       ) : (
@@ -506,12 +451,9 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           {jobs.map((job) => {
             const isProcessing = runningJobId === job.id;
             const apollo = job.apollo_enrichment;
-            const app = job.application;
-            const isTailored = !!app && (app.status === 'saved' || app.status === 'pending_approval' || app.status === 'sent' || hasTailoredAssets(app));
-            const isTailoring = !!app && app.status === 'tailoring' && !hasTailoredAssets(app);
             const isSelected = selectedJobIds.includes(job.id);
 
-              return (
+            return (
               <div
                 key={job.id}
                 onClick={() => handleCardClick(job)}
@@ -541,25 +483,9 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          {isTailored ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-emerald-200 text-emerald-700 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" /> Ready
-                            </span>
-                          ) : isTailoring ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-amber-200 text-amber-700 flex items-center gap-1">
-                              <Loader2 className="w-3 h-3 animate-spin" /> Tailoring
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-border text-slate-500">
-                              New
-                            </span>
-                          )}
-
-                          {app?.ats_score && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-border text-slate-600 font-mono">
-                              ATS {app.ats_score}%
-                            </span>
-                          )}
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-border text-slate-500">
+                            Untailored
+                          </span>
 
                           {job.match_score && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-border text-slate-600 font-mono">
@@ -638,40 +564,22 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {isTailored && app ? (
-                      <button
-                        onClick={(e) => handleSingleJobTailor(job, e)}
-                        className="flex items-center gap-1.5 rounded-full bg-accent-rose px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[#e36457]"
-                      >
-                        <FileText className="w-3.5 h-3.5" />
-                        <span>View Resume &amp; Letter</span>
-                      </button>
-                    ) : isTailoring ? (
-                      <button
-                        disabled
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border text-slate-500 text-xs font-medium cursor-not-allowed"
-                      >
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Tailoring...</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => handleSingleJobTailor(job, e)}
-                        disabled={!activeResume || isProcessing}
-                        className="flex items-center gap-1.5 rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary-200 hover:text-primary-600"
-                      >
-                        {isProcessing ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Starting...</span>
-                          </>
-                        ) : (
-                          <>
-                            <span>Tailor Now</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => handleSingleJobTailor(job, e)}
+                      disabled={!activeResume || isProcessing}
+                      className="flex items-center gap-1.5 rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary-200 hover:text-primary-600"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Starting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Tailor Now</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -682,20 +590,20 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
       {/* Floating Multi-Select Action Bar */}
       {selectedJobIds.length > 0 && (
-          <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-4 rounded-full bg-white/90 px-5 py-3 backdrop-blur-xl">
-          <div className="flex items-center gap-2">
+        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-4 rounded-full bg-white/90 px-5 py-3 backdrop-blur-xl shadow-lg border border-border max-w-[90vw] overflow-x-auto">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-xs font-semibold text-primary-600">
               {selectedJobIds.length} Job{selectedJobIds.length > 1 ? 's' : ''} Selected
             </span>
           </div>
 
-          <div className="h-4 w-px bg-border" />
+          <div className="h-4 w-px bg-border shrink-0" />
 
           <button
             onClick={handleBatchTailor}
             disabled={!activeResume || isBatchRunning}
-            className="flex items-center gap-2 rounded-full bg-accent-emerald px-5 py-2 text-xs font-bold text-white transition-colors hover:bg-[#18b486] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-full bg-accent-emerald px-5 py-2 text-xs font-bold text-white transition-colors hover:bg-[#18b486] disabled:opacity-50 shrink-0"
           >
             {isBatchRunning ? (
               <>
@@ -711,7 +619,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
           <button
             onClick={clearSelection}
-            className="text-xs text-slate-400 hover:text-slate-200"
+            className="text-xs text-slate-400 hover:text-slate-600 shrink-0"
           >
             Cancel
           </button>
@@ -725,9 +633,14 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           activeResume={activeResume}
           onClose={() => setInspectingJob(null)}
           onTailorStarted={(appId) => {
+            const tailoredId = inspectingJob.id;
             setInspectingJob(null);
+            setJobs((prev) => {
+              const next = prev.filter((j) => j.id !== tailoredId);
+              persistCache(next, discoveryStats, selectedCountries);
+              return next;
+            });
             onApplicationStarted(appId);
-            void refreshAfterTailor(30, 2000);
           }}
           onViewTailored={(appId) => {
             setInspectingJob(null);

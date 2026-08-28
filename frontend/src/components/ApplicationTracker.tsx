@@ -14,64 +14,107 @@ interface ApplicationTrackerProps {
 export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
   applicationIds,
   userId,
-  suspendAutoRefresh = false,
+  suspendAutoRefresh: _suspendAutoRefresh = false,
   refreshToken = 0,
   onSelectApplication,
 }) => {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const cacheKey = userId ? `voxyl.applications.cache.${userId}` : null;
+
+  type ApplicationCacheSnapshot = {
+    jobs?: Job[];
+    cachedAt?: number;
+  };
+
+  const readCache = useCallback((): Job[] | null => {
+    if (!cacheKey) return null;
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as ApplicationCacheSnapshot;
+      if (Array.isArray(parsed.jobs)) {
+        return parsed.jobs;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, [cacheKey]);
+
+  const [jobs, setJobs] = useState<Job[]>(() => {
+    const cached = readCache();
+    return cached || [];
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const hasTailoredAssets = (job: Job) =>
-    Boolean(job.application?.tailored_html || job.application?.pdf_url || job.application?.email_draft);
+  const persistCache = useCallback((nextJobs: Job[]) => {
+    if (!cacheKey) return;
+    try {
+      const snapshot: ApplicationCacheSnapshot = { jobs: nextJobs, cachedAt: Date.now() };
+      sessionStorage.setItem(cacheKey, JSON.stringify(snapshot));
+    } catch {
+      // ignore storage errors
+    }
+  }, [cacheKey]);
 
-  const loadTailoredJobs = useCallback(async () => {
+  const loadTailoredJobs = useCallback(async (force = false, silent = false) => {
     if (!userId) {
       setJobs([]);
       return;
     }
 
+    if (!force) {
+      const cached = readCache();
+      if (cached && cached.length > 0) {
+        setJobs(cached);
+        return;
+      }
+    }
+
     try {
-      setIsLoading(true);
-      const data = await jobsApi.listJobs(undefined, 100, 0, false, userId);
-      setJobs(
-        data.filter((job) => {
-          const status = job.application?.status;
-          return !!job.application && (status !== 'tailoring' || hasTailoredAssets(job));
-        })
-      );
+      if (!silent) setIsLoading(true);
+      const data = await jobsApi.listJobs(undefined, 100, 0, false, userId, true);
+      const tailoredOnly = data.filter((job) => Boolean(job.application));
+      setJobs(tailoredOnly);
+      persistCache(tailoredOnly);
     } catch {
-      setJobs([]);
+      // keep existing state
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
-  }, [userId]);
+  }, [userId, readCache, persistCache]);
 
+  // Hydrate from session cache first; only fall back to the database when needed.
   useEffect(() => {
-    if (suspendAutoRefresh) {
-      return;
-    }
-    void loadTailoredJobs();
-  }, [loadTailoredJobs, applicationIds.length, suspendAutoRefresh]);
-
-  useEffect(() => {
-    if (refreshToken === 0) {
-      return;
-    }
-    void loadTailoredJobs();
-  }, [loadTailoredJobs, refreshToken]);
-
-  useEffect(() => {
-    if (!userId || suspendAutoRefresh) {
+    if (!userId) {
+      setJobs([]);
       return;
     }
 
-    const interval = window.setInterval(() => {
-      void loadTailoredJobs();
-    }, 10000);
+    const cached = readCache();
+    if (cached && cached.length > 0) {
+      setJobs(cached);
+      return;
+    }
 
-    return () => window.clearInterval(interval);
-  }, [userId, loadTailoredJobs, suspendAutoRefresh]);
+    void loadTailoredJobs(false, false);
+  }, [userId, readCache, loadTailoredJobs]);
+
+  // When new applications are created or the modal requests a refresh, pull a fresh tailored list once.
+  useEffect(() => {
+    if (!userId || applicationIds.length === 0) return;
+    void loadTailoredJobs(true, true);
+  }, [applicationIds, loadTailoredJobs, userId]);
+
+  useEffect(() => {
+    if (!refreshToken) return;
+    void loadTailoredJobs(true, true);
+  }, [refreshToken, loadTailoredJobs]);
+
+  useEffect(() => {
+    persistCache(jobs);
+  }, [jobs, persistCache]);
 
   const displayedJobs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -116,7 +159,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => void loadTailoredJobs()}
+              onClick={() => void loadTailoredJobs(true, false)}
               disabled={isLoading}
               className="rounded-full border border-border bg-white/90 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
             >

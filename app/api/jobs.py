@@ -5,7 +5,7 @@ app/api/jobs.py — Job discovery and listing endpoints.
 from typing import Any, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import func, not_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -17,7 +17,7 @@ from app.agent.nodes.search_planner import plan_search_queries_node
 from app.agent.state import GraphState
 from app.config import settings
 from app.database import get_db
-from app.models.application import Application
+from app.models.application import Application, ApplicationStatus
 from app.models.job import Job
 from app.models.resume import Resume
 from app.models.user import User
@@ -121,12 +121,30 @@ def _job_to_response(job: Job, latest_app: Application | None = None) -> JobResp
     )
 
 
+def _latest_application_is_tailored(application_alias: Any) -> Any:
+    """Return a SQLAlchemy expression that identifies a tailored application row."""
+    return or_(
+        application_alias.tailored_html.is_not(None),
+        application_alias.rendered_pdf_url.is_not(None),
+        application_alias.email_draft.is_not(None),
+        application_alias.status.in_(
+            [
+                ApplicationStatus.saved,
+                ApplicationStatus.pending_approval,
+                ApplicationStatus.approved,
+                ApplicationStatus.sent,
+            ]
+        ),
+    )
+
+
 @router.get("", response_model=list[JobResponse])
 async def list_jobs(
     request: Request,
     user_id: Optional[int] = Query(default=None),
     latest: bool = Query(default=False),
     qualified: Optional[bool] = Query(default=None),
+    tailored: Optional[bool] = Query(default=None),
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -152,6 +170,7 @@ async def list_jobs(
     # 2. Build user-scoped query
     latest_app_subquery = (
         select(Application.job_id, func.max(Application.id).label("max_application_id"))
+        .where(Application.user_id == resolved_user_id)
         .group_by(Application.job_id)
         .subquery()
     )
@@ -165,6 +184,17 @@ async def list_jobs(
 
     if qualified is not None:
         stmt = stmt.where(Job.is_qualified == qualified)
+
+    tailored_expr = _latest_application_is_tailored(latest_app_alias)
+    if tailored is True:
+        stmt = stmt.where(latest_app_alias.id.is_not(None)).where(tailored_expr)
+    elif tailored is False:
+        stmt = stmt.where(
+            or_(
+                latest_app_alias.id.is_(None),
+                not_(tailored_expr),
+            )
+        )
 
     stmt = stmt.order_by(Job.id.desc())
 

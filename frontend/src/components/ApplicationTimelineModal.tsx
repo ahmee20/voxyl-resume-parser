@@ -105,11 +105,16 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
       setIsLoading(false);
       return;
     }
-    void fetchDetail(false);
+    void fetchDetail(true);
   }, [resolvedApplicationId]);
 
   useEffect(() => {
-    if (!resolvedApplicationId || !detail || detail.status !== 'tailoring' || hasTailoredAssets(detail)) return;
+    if (
+      !resolvedApplicationId ||
+      !detail ||
+      detail.ats_score != null ||
+      !['tailoring', 'saved', 'pending_approval'].includes(detail.status)
+    ) return;
     const interval = setInterval(async () => {
       try {
         const data = await applicationsApi.getApplication(resolvedApplicationId);

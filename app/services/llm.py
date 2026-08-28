@@ -56,16 +56,25 @@ def get_llm(
 
         log.info("llm_init", provider="groq", model=chosen_model)
 
-        fallback_llm = None
+        fallback_llms = []
         if enable_fallback:
+            fallback_key = settings.groq_fallback_key.strip() if settings.groq_fallback_key else ""
+            if fallback_key and fallback_key != groq_api_key:
+                fallback_llms.append(
+                    ChatGroq(
+                        model=chosen_model,
+                        api_key=fallback_key,
+                        temperature=temperature,
+                    )
+                )
             try:
-                fallback_llm = _build_ollama_llm(None, temperature)
+                fallback_llms.append(_build_ollama_llm(None, temperature))
             except Exception as e:
                 log.warning("llm_fallback_init_failed", error=str(e))
 
         if not groq_api_key:
             log.warning("groq_api_key_empty_using_ollama_fallback", ollama_model=settings.ollama_model)
-            return fallback_llm or _build_ollama_llm(None, temperature)
+            return fallback_llms[0] if fallback_llms else _build_ollama_llm(None, temperature)
 
         primary_llm = ChatGroq(
             model=chosen_model,
@@ -73,8 +82,8 @@ def get_llm(
             temperature=temperature,
         )
 
-        if fallback_llm:
-            return primary_llm.with_fallbacks([fallback_llm])
+        if fallback_llms:
+            return primary_llm.with_fallbacks(fallback_llms)
         return primary_llm
 
     elif selected_provider == "ollama":

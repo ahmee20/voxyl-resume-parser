@@ -35,7 +35,9 @@ def render_pdf_node(state: GraphState) -> GraphState:
             tailored_resume_html=tailored_html,
             resume_text=state.get("resume_text", ""),
             profile=ResumeProfile(),
-        ) or {}
+        )
+
+    use_template = bool(template_data)
 
     if not pdf_url and tailored_html:
         try:
@@ -45,8 +47,8 @@ def render_pdf_node(state: GraphState) -> GraphState:
                 return asyncio.run(
                     convert_html_to_pdf(
                         tailored_html,
-                        template_data=template_data,
-                        template_id=settings.pdfco_resume_template_id,
+                        template_data=template_data if use_template else None,
+                        template_id=settings.pdfco_resume_template_id if use_template else None,
                     )
                 )
 

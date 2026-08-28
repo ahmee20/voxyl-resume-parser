@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # Groq API
     groq_api_key: str = ""
+    groq_fallback_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
 
     # Gemini API

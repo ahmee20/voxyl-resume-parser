@@ -101,10 +101,33 @@ def _normalize_added_keywords(items: object) -> list[dict[str, str]]:
     return normalized
 
 
-def _merge_added_keywords(primary: object, additions: object) -> list[dict[str, str]]:
-    merged = _normalize_added_keywords(primary)
+def _keyword_in_text(keyword: str, text: str) -> bool:
+    normalized_keyword = re.sub(r"\s+", " ", keyword.casefold()).strip()
+    normalized_text = re.sub(r"\s+", " ", text.casefold()).strip()
+    return bool(
+        normalized_keyword
+        and re.search(rf"(?<!\w){re.escape(normalized_keyword)}(?!\w)", normalized_text)
+    )
+
+
+def _filter_added_keywords(items: object, resume_text: str, job_description: str) -> list[dict[str, str]]:
+    return [
+        item
+        for item in _normalize_added_keywords(items)
+        if not _keyword_in_text(item["keyword"], resume_text)
+        and _keyword_in_text(item["keyword"], job_description)
+    ]
+
+
+def _merge_added_keywords(
+    primary: object,
+    additions: object,
+    resume_text: str,
+    job_description: str,
+) -> list[dict[str, str]]:
+    merged = _filter_added_keywords(primary, resume_text, job_description)
     seen = {item["keyword"].lower() for item in merged}
-    for item in _normalize_added_keywords(additions):
+    for item in _filter_added_keywords(additions, resume_text, job_description):
         key = item["keyword"].lower()
         if key in seen:
             continue
@@ -147,7 +170,7 @@ def _run_keyword_expansion(resume_text: str, job_description: str, current_analy
     parsed = _extract_json(raw)
     if not parsed:
         return []
-    return _normalize_added_keywords(parsed.get("added_keywords"))
+    return _filter_added_keywords(parsed.get("added_keywords"), resume_text, job_description)
 
 
 def run_gap_analysis(resume_text: str, job_description: str) -> str:
@@ -174,6 +197,8 @@ def run_gap_analysis(resume_text: str, job_description: str) -> str:
         parsed["added_keywords"] = _merge_added_keywords(
             parsed.get("added_keywords"),
             _run_keyword_expansion(resume_text, job_description, parsed),
+            resume_text,
+            job_description,
         )
         return json.dumps(parsed, ensure_ascii=False)
     return raw

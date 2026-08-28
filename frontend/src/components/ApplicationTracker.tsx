@@ -201,7 +201,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                       <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
                         Tailored
                       </span>
-                      {app?.ats_score ? (
+                      {app?.ats_score != null ? (
                         <span className="rounded-full border border-border bg-white/90 px-2.5 py-1 text-[10px] font-mono text-slate-500">
                           ATS {app.ats_score}%
                         </span>

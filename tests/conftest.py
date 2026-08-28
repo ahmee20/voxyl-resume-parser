@@ -23,6 +23,7 @@ os.environ.setdefault("PDFCO_API_KEY", "test-pdfco-key")
 os.environ.setdefault("SESSION_SECRET_KEY", "test-session-secret-key-32chars!!")
 os.environ.setdefault("TOKEN_ENCRYPTION_KEY", "dGVzdC1mZXJuZXQta2V5LTMyLWJ5dGVzLWhlcmUhISE=")
 os.environ["SCHEDULER_ENABLED"] = "false"
+os.environ["FRONTEND_URL"] = "http://test"
 # Use SQLite for unit tests — avoids a live Postgres requirement
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test_autopilot.db")
 

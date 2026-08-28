@@ -126,7 +126,10 @@ def _extract_json(text: str) -> dict[str, Any] | None:
         return None
 
     payload = cleaned[start : end + 1]
-    data = json.loads(payload)
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        data, _ = json.JSONDecoder().raw_decode(cleaned[start:])
     return data if isinstance(data, dict) else None
 
 

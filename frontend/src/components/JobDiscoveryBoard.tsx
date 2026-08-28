@@ -153,11 +153,6 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   };
 
   useEffect(() => {
-    if (suspendAutoRefresh) {
-      setIsLoading(false);
-      return;
-    }
-
     const nextCountries = user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : defaultCountries;
     setSelectedCountries(nextCountries);
 
@@ -191,8 +186,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           sessionStorage.removeItem(cacheKey);
         }
       }
-      setJobs([]);
-      setDiscoveryStats(null);
+      if (!suspendAutoRefresh) {
+        setJobs([]);
+        setDiscoveryStats(null);
+      }
       setIsLoading(false);
       return;
     }
@@ -217,6 +214,11 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       } catch {
         sessionStorage.removeItem(cacheKey);
       }
+    }
+
+    if (suspendAutoRefresh) {
+      setIsLoading(false);
+      return;
     }
 
     void fetchJobs();

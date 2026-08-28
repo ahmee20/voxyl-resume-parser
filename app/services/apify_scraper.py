@@ -69,6 +69,108 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
     return None
 
 
+def _item_to_dict(item: Any) -> dict[str, Any]:
+    if isinstance(item, dict):
+        return item
+
+    for attr_name in ("model_dump", "to_dict", "dict"):
+        attr = getattr(item, attr_name, None)
+        if callable(attr):
+            try:
+                data = attr()
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+
+    if hasattr(item, "__dict__") and isinstance(getattr(item, "__dict__"), dict):
+        return {key: value for key, value in item.__dict__.items() if not key.startswith("_")}
+
+    return {}
+
+
+def _normalize_item(
+    item_dict: dict[str, Any],
+    *,
+    idx: int,
+    target_role: str,
+    location_str: str,
+    cutoff: datetime | None,
+    apply_cutoff: bool,
+) -> Optional[dict[str, Any]]:
+    raw_url = (
+        item_dict.get("link")
+        or item_dict.get("jobUrl")
+        or item_dict.get("url")
+        or item_dict.get("applyUrl")
+        or f"https://linkedin.com/jobs/view/{item_dict.get('id') or idx}"
+    )
+    raw_title = (
+        item_dict.get("title")
+        or item_dict.get("jobTitle")
+        or item_dict.get("positionName")
+        or target_role
+    )
+    raw_company = (
+        item_dict.get("companyName")
+        or item_dict.get("company")
+        or item_dict.get("company_name")
+        or item_dict.get("companyDetails")
+        or "Technology Company"
+    )
+    raw_location = (
+        item_dict.get("location")
+        or item_dict.get("city")
+        or item_dict.get("country")
+        or item_dict.get("place")
+        or item_dict.get("locationName")
+        or location_str
+    )
+    raw_desc = (
+        item_dict.get("description")
+        or item_dict.get("jobDescription")
+        or item_dict.get("text")
+        or item_dict.get("descriptionText")
+        or f"Job listing for {raw_title} at {raw_company}."
+    )
+    raw_email = (
+        item_dict.get("email")
+        or item_dict.get("contactEmail")
+        or item_dict.get("recruiterEmail")
+        or item_dict.get("jobPosterEmail")
+    )
+    raw_posted = (
+        item_dict.get("postedDate")
+        or item_dict.get("postedTime")
+        or item_dict.get("postedAt")
+        or item_dict.get("postingDate")
+    )
+
+    posted_dt = _parse_timestamp(raw_posted)
+    if apply_cutoff and cutoff and posted_dt and posted_dt < cutoff:
+        return None
+
+    clean_title = _clean_str(raw_title, default=target_role)
+    clean_company = _clean_str(raw_company, default="Company")
+    clean_url = _clean_str(raw_url, default=f"https://linkedin.com/jobs/view/{idx}")
+    clean_location = _clean_str(raw_location, default=location_str) or location_str
+    clean_desc = _clean_str(raw_desc, default=f"Job posting for {clean_title} at {clean_company}.")
+    clean_email = _clean_str(raw_email, default="") or None
+    clean_posted = _clean_str(raw_posted, default="") or None
+
+    return {
+        "external_id": str(item_dict.get("id") or item_dict.get("jobId") or idx),
+        "title": clean_title,
+        "company": clean_company,
+        "url": clean_url,
+        "description": clean_desc,
+        "location": clean_location,
+        "recruiter_email": clean_email,
+        "posted_at": clean_posted,
+        "source": "apify",
+    }
+
+
 def scrape_jobs_from_apify(
     queries: list[str],
     countries: Optional[list[str]] = None,
@@ -158,81 +260,40 @@ def scrape_jobs_from_apify(
         log.info("apify_raw_items_fetched", count=len(dataset_items))
 
         normalized_jobs: list[dict[str, Any]] = []
+        cutoff_skipped_jobs: list[dict[str, Any]] = []
         for idx, item in enumerate(dataset_items if limit is None else dataset_items[:limit]):
-            item_dict = item if isinstance(item, dict) else (item.__dict__ if hasattr(item, "__dict__") else {})
-
-            raw_url = (
-                item_dict.get("link")
-                or item_dict.get("jobUrl")
-                or item_dict.get("url")
-                or item_dict.get("applyUrl")
-                or f"https://linkedin.com/jobs/view/{item_dict.get('id') or idx}"
+            item_dict = _item_to_dict(item)
+            normalized = _normalize_item(
+                item_dict,
+                idx=idx,
+                target_role=target_role,
+                location_str=location_str,
+                cutoff=cutoff,
+                apply_cutoff=True,
             )
-            raw_title = (
-                item_dict.get("title")
-                or item_dict.get("jobTitle")
-                or item_dict.get("positionName")
-                or target_role
-            )
-            raw_company = (
-                item_dict.get("companyName")
-                or item_dict.get("company")
-                or item_dict.get("company_name")
-                or item_dict.get("companyDetails")
-                or "Technology Company"
-            )
-            raw_location = (
-                item_dict.get("location")
-                or item_dict.get("city")
-                or item_dict.get("country")
-                or item_dict.get("place")
-                or item_dict.get("locationName")
-                or location_str
-            )
-            raw_desc = (
-                item_dict.get("description")
-                or item_dict.get("jobDescription")
-                or item_dict.get("text")
-                or item_dict.get("descriptionText")
-                or f"Job listing for {raw_title} at {raw_company}."
-            )
-            raw_email = (
-                item_dict.get("email")
-                or item_dict.get("contactEmail")
-                or item_dict.get("recruiterEmail")
-                or item_dict.get("jobPosterEmail")
-            )
-            raw_posted = (
-                item_dict.get("postedDate")
-                or item_dict.get("postedTime")
-                or item_dict.get("postedAt")
-                or item_dict.get("postingDate")
-            )
-            posted_dt = _parse_timestamp(raw_posted)
-            if cutoff and posted_dt and posted_dt < cutoff:
+            if normalized:
+                normalized_jobs.append(normalized)
                 continue
 
-            clean_title = _clean_str(raw_title, default=target_role)
-            clean_company = _clean_str(raw_company, default="Company")
-            clean_url = _clean_str(raw_url, default=f"https://linkedin.com/jobs/view/{idx}")
-            clean_location = _clean_str(raw_location, default=location_str) or location_str
-            clean_desc = _clean_str(raw_desc, default=f"Job posting for {clean_title} at {clean_company}.")
-            clean_email = _clean_str(raw_email, default="") or None
-            clean_posted = _clean_str(raw_posted, default="") or None
+            if cutoff:
+                fallback = _normalize_item(
+                    item_dict,
+                    idx=idx,
+                    target_role=target_role,
+                    location_str=location_str,
+                    cutoff=cutoff,
+                    apply_cutoff=False,
+                )
+                if fallback:
+                    cutoff_skipped_jobs.append(fallback)
 
-            normalized_jobs.append(
-                {
-                    "external_id": str(item_dict.get("id") or item_dict.get("jobId") or idx),
-                    "title": clean_title,
-                    "company": clean_company,
-                    "url": clean_url,
-                    "description": clean_desc,
-                    "location": clean_location,
-                    "recruiter_email": clean_email,
-                    "posted_at": clean_posted,
-                    "source": "apify",
-                }
+        if not normalized_jobs and cutoff_skipped_jobs:
+            log.warning(
+                "apify_cutoff_relaxed",
+                skipped=len(cutoff_skipped_jobs),
+                reason="all_jobs_fell_outside_window_or_missing_parseable_timestamp",
             )
+            normalized_jobs = cutoff_skipped_jobs
 
         log.info("apify_scrape_success", total_normalized=len(normalized_jobs))
         return normalized_jobs

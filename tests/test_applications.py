@@ -15,6 +15,7 @@ from app.models.resume import Resume
 from app.models.user import User
 from app.services.resume_template import ResumeProfile, render_resume_html
 from app.services.pdfco_resume_payload import _extract_json
+from app.services.llm import _retry_once
 
 
 @pytest.mark.asyncio
@@ -137,6 +138,17 @@ def test_render_resume_html_uses_profile_links_without_replacing_resume_identity
 
 def test_pdfco_payload_parser_recovers_malformed_llm_json():
     assert _extract_json('{"summary":"unterminated}') == {"summary": "unterminated}"}
+
+
+def test_llm_retries_same_provider_once_after_error():
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = [RuntimeError("rate limited"), "success"]
+    with patch("app.services.llm.time.sleep") as mock_sleep:
+        result = _retry_once(mock_llm).invoke([])
+
+    assert result == "success"
+    mock_sleep.assert_called_once_with(5)
+    assert mock_llm.invoke.call_count == 2
 
 
 @pytest.mark.asyncio

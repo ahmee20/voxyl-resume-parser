@@ -53,9 +53,6 @@ def _user_profile_payload(user: User | None) -> dict[str, str | None]:
     if not user:
         return {}
     return {
-        "name": user.name,
-        "preferred_name": user.preferred_name or user.name,
-        "email": user.email,
         "github_url": user.github_url,
         "portfolio_url": user.portfolio_url,
         "linkedin_url": user.linkedin_url,

@@ -14,9 +14,12 @@ Supports:
 Returns a standard LangChain BaseChatModel or RunnableWithFallbacks instance.
 """
 
+import time
+
 import structlog
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import Runnable
+from langchain_core.runnables import RunnableLambda
 
 from app.config import settings
 
@@ -39,6 +42,17 @@ def _build_ollama_llm(
         num_predict=max_tokens,
         client_kwargs={"timeout": settings.llm_timeout_seconds},
     )
+
+
+def _retry_once(llm: BaseChatModel) -> Runnable:
+    def invoke_with_retry(messages):
+        try:
+            return llm.invoke(messages)
+        except Exception:
+            time.sleep(5)
+            return llm.invoke(messages)
+
+    return RunnableLambda(invoke_with_retry)
 
 
 def get_llm(
@@ -93,9 +107,10 @@ def get_llm(
             max_tokens=max_tokens,
         )
 
+        primary_with_retry = _retry_once(primary_llm)
         if fallback_llms:
-            return primary_llm.with_fallbacks(fallback_llms)
-        return primary_llm
+            return primary_with_retry.with_fallbacks(fallback_llms)
+        return primary_with_retry
 
     elif selected_provider == "ollama":
         return _build_ollama_llm(model, temperature)

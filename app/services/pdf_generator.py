@@ -5,18 +5,65 @@ app/services/pdf_generator.py - PDF generation service via PDF.co REST API.
 from __future__ import annotations
 
 import json
+import asyncio
 from typing import Any
 
 import httpx
 import structlog
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import settings
+from app.services.llm import get_llm
 
 log = structlog.get_logger(__name__)
 
 PDFCO_API_URL = "https://api.pdf.co/v1/pdf/convert/from/html"
 PDFCO_TEMPLATE_URL = "https://api.pdf.co/v1/templates/html/{template_id}"
 _TEMPLATE_HTML_CACHE: dict[int, str] = {}
+
+
+async def _diagnose_pdfco_failure(error: str, payload: dict[str, Any]) -> None:
+    try:
+        llm = get_llm(temperature=0.0, max_tokens=2000)
+        response = await asyncio.to_thread(
+            llm.invoke,
+            [
+                SystemMessage(
+                    content=(
+                        "You diagnose PDF.co HTML-to-PDF template failures. Explain the likely issue and the exact correction. "
+                        "PDF.co template mode requires valid HTML in 'html', a numeric 'templateid', and 'templatedata' as a JSON string "
+                        "whose keys match the saved template. Do not invent missing template fields."
+                    ),
+                ),
+                HumanMessage(
+                    content=f"PDF.co error:\n{error}\n\nRequest payload:\n{json.dumps(payload, ensure_ascii=False)}",
+                ),
+            ],
+        )
+        diagnosis = getattr(response, "content", str(response))
+        log.error("pdfco_failure_diagnosed", error=error, diagnosis=str(diagnosis)[:4000])
+    except Exception as exc:
+        log.error("pdfco_failure_diagnosis_failed", error=error, diagnosis_error=str(exc))
+
+
+async def _post_pdfco_with_retry(payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(PDFCO_API_URL, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                if data.get("error"):
+                    raise ValueError(f"PDF.co conversion error: {data.get('message', 'Unknown error')}")
+                return data
+        except Exception as exc:
+            last_error = exc
+            if attempt == 0:
+                await asyncio.sleep(2)
+
+    await _diagnose_pdfco_failure(str(last_error), payload)
+    raise last_error or RuntimeError("PDF.co conversion failed")
 
 
 def _prune_empty(value: Any) -> Any:
@@ -111,15 +158,9 @@ async def convert_html_to_pdf(
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(PDFCO_API_URL, json=payload, headers=headers)
-        response.raise_for_status()
-        data = response.json()
+    data = await _post_pdfco_with_retry(payload, headers)
 
-        if data.get("error"):
-            raise ValueError(f"PDF.co conversion error: {data.get('message', 'Unknown error')}")
-
-        url = data.get("url")
-        if not url:
-            raise ValueError("PDF.co did not return a valid download URL.")
-        return url
+    url = data.get("url")
+    if not url:
+        raise ValueError("PDF.co did not return a valid download URL.")
+    return url

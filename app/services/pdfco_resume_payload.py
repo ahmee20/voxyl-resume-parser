@@ -107,10 +107,9 @@ def _profile_block(profile: ResumeProfile | None) -> str:
         return "{}"
     return json.dumps(
         {
-            "full_name": profile.name,
-            "email": profile.email,
             "linkedin_url": profile.linkedin_url,
             "github_url": profile.github_url,
+            "portfolio_url": profile.portfolio_url,
         },
         ensure_ascii=False,
     )

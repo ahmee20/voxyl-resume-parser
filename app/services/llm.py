@@ -23,7 +23,11 @@ from app.config import settings
 log = structlog.get_logger(__name__)
 
 
-def _build_ollama_llm(model: str | None, temperature: float) -> BaseChatModel:
+def _build_ollama_llm(
+    model: str | None,
+    temperature: float,
+    max_tokens: int | None = None,
+) -> BaseChatModel:
     from langchain_ollama import ChatOllama
 
     chosen_model = model or settings.ollama_model
@@ -32,6 +36,8 @@ def _build_ollama_llm(model: str | None, temperature: float) -> BaseChatModel:
         model=chosen_model,
         base_url=settings.ollama_base_url,
         temperature=temperature,
+        num_predict=max_tokens,
+        client_kwargs={"timeout": settings.llm_timeout_seconds},
     )
 
 
@@ -40,6 +46,7 @@ def get_llm(
     model: str | None = None,
     temperature: float = 0.0,
     enable_fallback: bool = True,
+    max_tokens: int | None = None,
 ) -> BaseChatModel | Runnable:
     """
     Return a configured chat model instance based on active provider.
@@ -65,21 +72,25 @@ def get_llm(
                         model=chosen_model,
                         api_key=fallback_key,
                         temperature=temperature,
+                        timeout=settings.llm_timeout_seconds,
+                        max_tokens=max_tokens,
                     )
                 )
             try:
-                fallback_llms.append(_build_ollama_llm(None, temperature))
+                fallback_llms.append(_build_ollama_llm(None, temperature, max_tokens))
             except Exception as e:
                 log.warning("llm_fallback_init_failed", error=str(e))
 
         if not groq_api_key:
             log.warning("groq_api_key_empty_using_ollama_fallback", ollama_model=settings.ollama_model)
-            return fallback_llms[0] if fallback_llms else _build_ollama_llm(None, temperature)
+            return fallback_llms[0] if fallback_llms else _build_ollama_llm(None, temperature, max_tokens)
 
         primary_llm = ChatGroq(
             model=chosen_model,
             api_key=groq_api_key,
             temperature=temperature,
+            timeout=settings.llm_timeout_seconds,
+            max_tokens=max_tokens,
         )
 
         if fallback_llms:

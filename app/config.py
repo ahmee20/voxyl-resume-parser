@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_fallback_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
+    llm_timeout_seconds: float = 120.0
+    llm_max_output_tokens: int = 25000
 
     # Gemini API
     gemini_api_key: str = ""

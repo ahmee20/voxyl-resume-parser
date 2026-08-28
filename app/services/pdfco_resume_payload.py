@@ -10,7 +10,9 @@ from typing import Any
 
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.utils.json import parse_partial_json
 
+from app.config import settings
 from app.services.llm import get_llm
 from app.services.resume_template import ResumeProfile
 
@@ -129,7 +131,10 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:
-        data, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+        try:
+            data = parse_partial_json(payload)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
     return data if isinstance(data, dict) else None
 
 
@@ -207,7 +212,7 @@ def build_pdfco_resume_template_data(
     if not (tailored_resume_html.strip() or resume_text.strip()):
         return None
 
-    llm = get_llm(temperature=0.0)
+    llm = get_llm(temperature=0.0, max_tokens=settings.llm_max_output_tokens)
     messages = [
         SystemMessage(content=RESUME_TEMPLATE_PROMPT),
         HumanMessage(

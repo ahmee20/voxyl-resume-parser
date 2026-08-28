@@ -52,7 +52,7 @@ async def _fetch_template_html(template_id: int) -> str | None:
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.get(PDFCO_TEMPLATE_URL.format(template_id=template_id), headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -111,7 +111,7 @@ async def convert_html_to_pdf(
         "Content-Type": "application/json",
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.post(PDFCO_API_URL, json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()

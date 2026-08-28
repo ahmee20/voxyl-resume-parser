@@ -13,7 +13,7 @@ from app.agent.state import GraphState
 from app.config import settings
 from app.services.pdf_generator import convert_html_to_pdf
 from app.services.pdfco_resume_payload import build_pdfco_resume_template_data
-from app.services.resume_template import ResumeProfile
+from app.services.resume_template import ResumeProfile, render_resume_html
 
 log = structlog.get_logger(__name__)
 
@@ -29,12 +29,23 @@ def render_pdf_node(state: GraphState) -> GraphState:
     tailored_html = state.get("tailored_resume_html") or state.get("resume_html", "")
     pdf_url = state.get("pdf_url")
     template_data = state.get("resume_template_data")
+    profile_data = state.get("user_profile") or {}
+    profile = ResumeProfile(
+        name=profile_data.get("name"),
+        email=profile_data.get("email"),
+        github_url=profile_data.get("github_url"),
+        portfolio_url=profile_data.get("portfolio_url"),
+        linkedin_url=profile_data.get("linkedin_url"),
+    )
+
+    if "<div" not in tailored_html.lower() or "</div>" not in tailored_html.lower():
+        tailored_html = render_resume_html(state.get("resume_text", ""), profile)
 
     if not template_data:
         template_data = build_pdfco_resume_template_data(
             tailored_resume_html=tailored_html,
             resume_text=state.get("resume_text", ""),
-            profile=ResumeProfile(),
+            profile=profile,
         )
 
     use_template = bool(template_data)

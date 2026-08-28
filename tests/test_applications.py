@@ -14,6 +14,7 @@ from app.agent.state import GraphState
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.resume_template import ResumeProfile, render_resume_html
+from app.services.pdfco_resume_payload import _extract_json
 
 
 @pytest.mark.asyncio
@@ -132,6 +133,10 @@ def test_render_resume_html_uses_profile_links_without_replacing_resume_identity
     assert "Jane Doe" in result
     assert "Account Name" not in result
     assert "https://github.com/jane" in result
+
+
+def test_pdfco_payload_parser_recovers_malformed_llm_json():
+    assert _extract_json('{"summary":"unterminated}') == {"summary": "unterminated}"}
 
 
 @pytest.mark.asyncio

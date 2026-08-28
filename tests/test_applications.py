@@ -41,11 +41,11 @@ async def test_analyze_gaps_node_updates_state():
 async def test_analyze_gaps_node_expands_supported_keywords():
     state: GraphState = {
         "application_id": 1,
-        "resume_text": "Built a deep learning project and worked with LangSmith while developing LLM workflows.",
+        "resume_text": "Electrical engineer who designed embedded control systems and coordinated cross-functional projects.",
         "current_job": {
-            "title": "ML Engineer",
+            "title": "Systems Engineer",
             "company": "Tech Corp",
-            "description": "Looking for PyTorch, TensorFlow, evaluation, tracing, and observability experience.",
+            "description": "Looking for PLC programming, SCADA, stakeholder management, and process improvement experience.",
         },
     }
 
@@ -53,24 +53,30 @@ async def test_analyze_gaps_node_expands_supported_keywords():
         {
             "added_keywords": [],
             "removed_keywords": [],
-            "summary": "Focus on the strongest technical keywords.",
+            "summary": "Focus on the strongest transferable skills.",
             "notes": [],
+        }
+    )
+    mock_expansion = json.dumps(
+        {
+            "added_keywords": [
+                {"keyword": "PLC programming", "evidence": "designed embedded control systems"},
+                {"keyword": "stakeholder management", "evidence": "coordinated cross-functional projects"},
+            ]
         }
     )
 
     with patch("app.agent.nodes.analyze_gaps.get_llm") as mock_get_llm:
         mock_chat = MagicMock()
-        mock_chat.invoke.return_value = MagicMock(content=mock_analysis)
+        mock_chat.invoke.side_effect = [MagicMock(content=mock_analysis), MagicMock(content=mock_expansion)]
         mock_get_llm.return_value = mock_chat
 
         updated = analyze_gaps_node(state)
         parsed = json.loads(updated["gap_analysis"])
 
         added_keywords = {item["keyword"] for item in parsed["added_keywords"]}
-        assert "PyTorch" in added_keywords
-        assert "TensorFlow" in added_keywords
-        assert "evaluation" in added_keywords
-        assert "tracing" in added_keywords
+        assert "PLC programming" in added_keywords
+        assert "stakeholder management" in added_keywords
 
 
 @pytest.mark.asyncio

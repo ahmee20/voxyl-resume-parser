@@ -28,8 +28,6 @@ CRITICAL GUARDRAIL & ETHICAL CONSTRAINT:
 - You must NEVER invent, fabricate, or hallucinate credentials, degrees, employers, skills, or experience that the candidate does not have.
 - `added_keywords` should contain JD-relevant keywords that can be safely and credibly introduced into the resume because the resume shows supporting evidence for the underlying capability.
 - The added keyword itself may be a newer or adjacent term, as long as the resume gives clear support for the domain.
-- Example: if the resume mentions a "deep learning project", it is valid to recommend `PyTorch` or `TensorFlow` when the JD asks for those frameworks.
-- Example: if the resume mentions `LangSmith`, it is valid to recommend `evaluation`, `tracing`, and `observability` when those terms help align with the JD.
 - Do not invent a capability that the resume does not support at all. If the JD requires something completely absent, put it in notes.
 - When in doubt, leave it out and flag the uncertainty in notes instead.
 
@@ -72,28 +70,12 @@ def _extract_json(text: str) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def _norm_text(text: str) -> str:
-    return re.sub(r"\s+", " ", text.lower()).strip()
-
-
-def _has_any(text: str, patterns: list[str]) -> bool:
-    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
-
-
-def _find_evidence(resume_text: str, phrases: list[str], fallback: str) -> str:
-    for phrase in phrases:
-        match = re.search(phrase, resume_text, flags=re.IGNORECASE)
-        if match:
-            return match.group(0)
-    return fallback
-
-
-def _normalize_added_keywords(items: object) -> tuple[list[dict[str, str]], set[str]]:
+def _normalize_added_keywords(items: object) -> list[dict[str, str]]:
     normalized: list[dict[str, str]] = []
     seen: set[str] = set()
 
     if not isinstance(items, list):
-        return normalized, seen
+        return normalized
 
     for item in items:
         keyword = ""
@@ -116,49 +98,56 @@ def _normalize_added_keywords(items: object) -> tuple[list[dict[str, str]], set[
             }
         )
 
-    return normalized, seen
+    return normalized
 
 
-def _add_keyword(
-    items: list[dict[str, str]],
-    seen: set[str],
-    keyword: str,
-    evidence: str,
-) -> None:
-    key = keyword.strip().lower()
-    if not key or key in seen:
-        return
-    items.append({"keyword": keyword.strip(), "evidence": evidence.strip() or keyword.strip()})
-    seen.add(key)
+def _merge_added_keywords(primary: object, additions: object) -> list[dict[str, str]]:
+    merged = _normalize_added_keywords(primary)
+    seen = {item["keyword"].lower() for item in merged}
+    for item in _normalize_added_keywords(additions):
+        key = item["keyword"].lower()
+        if key in seen:
+            continue
+        merged.append(item)
+        seen.add(key)
+    return merged
 
 
-def _augment_keywords(parsed: dict, resume_text: str, job_description: str) -> dict:
-    added_keywords, seen = _normalize_added_keywords(parsed.get("added_keywords"))
-    resume_norm = _norm_text(resume_text)
-    jd_norm = _norm_text(job_description)
+def _run_keyword_expansion(resume_text: str, job_description: str, current_analysis: dict) -> list[dict[str, str]]:
+    """Ask the LLM for additional, domain-agnostic ATS keywords that are supported by the resume."""
+    llm = get_llm(temperature=0.0)
+    messages = [
+        SystemMessage(
+            content=(
+                "You are an ATS keyword expansion assistant. "
+                "Given a base resume, a target job description, and an existing gap analysis, suggest only additional keywords that are a legitimate, domain-appropriate extension of the resume's real capabilities. "
+                "This must work for any field, including engineering, business, operations, design, healthcare, or research. "
+                "Do not invent experience. The keyword may be more specific than the exact resume wording, but it must still be supported by a direct quote from the resume. "
+                "Return STRICT JSON only with this schema: "
+                '{"added_keywords":[{"keyword":"keyword or phrase","evidence":"exact short quote from the base resume"}]} '
+                "Limit to at most 5 new keywords and avoid duplicates."
+            )
+        ),
+        HumanMessage(
+            content=(
+                f"### TARGET JOB DESCRIPTION:\n{job_description}\n\n"
+                f"### CANDIDATE BASE RESUME:\n{resume_text}\n\n"
+                f"### CURRENT GAP ANALYSIS JSON:\n{json.dumps(current_analysis, ensure_ascii=False)}\n\n"
+                "Return the JSON payload now."
+            )
+        ),
+    ]
 
-    if _has_any(resume_norm, [r"\bdeep learning\b", r"\bneural network\b", r"\bcomputer vision\b"]) and _has_any(
-        jd_norm, [r"\bpytorch\b", r"\btensorflow\b", r"\bdeep learning\b", r"\bneural network\b", r"\bml\b", r"\bmachine learning\b"]
-    ):
-        evidence = _find_evidence(resume_text, [r"deep learning", r"neural network", r"computer vision"], "deep learning")
-        _add_keyword(added_keywords, seen, "PyTorch", evidence)
-        _add_keyword(added_keywords, seen, "TensorFlow", evidence)
+    response = llm.invoke(messages)
+    content = response.content
+    if isinstance(content, list):
+        content = "".join([part if isinstance(part, str) else part.get("text", "") for part in content])
 
-    if _has_any(resume_norm, [r"\blangsmith\b"]):
-        evidence = _find_evidence(resume_text, [r"LangSmith"], "LangSmith")
-        _add_keyword(added_keywords, seen, "evaluation", evidence)
-        _add_keyword(added_keywords, seen, "tracing", evidence)
-        _add_keyword(added_keywords, seen, "observability", evidence)
-
-    if _has_any(resume_norm, [r"\blangchain\b", r"\bllm\b", r"\brag\b", r"\bagentic\b", r"\bai agent\b"]) and _has_any(
-        jd_norm, [r"\bevaluation\b", r"\btracing\b", r"\bobservability\b", r"\bllmops\b", r"\bprompt engineering\b"]
-    ):
-        evidence = _find_evidence(resume_text, [r"LangChain", r"LLM", r"RAG", r"agentic", r"AI agent"], "LLM systems work")
-        _add_keyword(added_keywords, seen, "evaluation", evidence)
-        _add_keyword(added_keywords, seen, "tracing", evidence)
-
-    parsed["added_keywords"] = added_keywords
-    return parsed
+    raw = str(content).strip()
+    parsed = _extract_json(raw)
+    if not parsed:
+        return []
+    return _normalize_added_keywords(parsed.get("added_keywords"))
 
 
 def run_gap_analysis(resume_text: str, job_description: str) -> str:
@@ -182,7 +171,10 @@ def run_gap_analysis(resume_text: str, job_description: str) -> str:
     raw = str(content).strip()
     parsed = _extract_json(raw)
     if parsed is not None:
-        parsed = _augment_keywords(parsed, resume_text, job_description)
+        parsed["added_keywords"] = _merge_added_keywords(
+            parsed.get("added_keywords"),
+            _run_keyword_expansion(resume_text, job_description, parsed),
+        )
         return json.dumps(parsed, ensure_ascii=False)
     return raw
 

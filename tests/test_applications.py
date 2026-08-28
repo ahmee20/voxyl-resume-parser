@@ -13,6 +13,7 @@ from app.agent.nodes.render_pdf import render_pdf_node
 from app.agent.state import GraphState
 from app.models.resume import Resume
 from app.models.user import User
+from app.services.resume_template import ResumeProfile, render_resume_html
 
 
 @pytest.mark.asyncio
@@ -95,6 +96,42 @@ async def test_tailor_resume_node_updates_html():
 
         updated = tailor_resume_node(state)
         assert updated["tailored_resume_html"] == mock_tailored_html
+
+
+def test_tailored_html_applies_keyword_changes_and_profile_links():
+    base_html = '<div class="resume"><header><h1>Jane Doe</h1></header><p>Python LegacyTool</p></div>'
+    gap_analysis = json.dumps(
+        {
+            "added_keywords": [{"keyword": "LangGraph", "evidence": "Python"}],
+            "removed_keywords": ["LegacyTool"],
+        }
+    )
+
+    with patch("app.agent.nodes.tailor_resume.get_llm") as mock_get_llm:
+        mock_get_llm.return_value.invoke.return_value = MagicMock(content=base_html)
+        result = tailor_resume_node(
+            {
+                "resume_html": base_html,
+                "gap_analysis": gap_analysis,
+                "user_profile": {"github_url": "github.com/jane"},
+            }
+        )
+
+    tailored_html = result["tailored_resume_html"]
+    assert "LegacyTool" not in tailored_html
+    assert "LangGraph" in tailored_html
+    assert "https://github.com/jane" in tailored_html
+
+
+def test_render_resume_html_uses_profile_links_without_replacing_resume_identity():
+    result = render_resume_html(
+        "Jane Doe\nElectrical Engineer\n\nExperience\n- Designed control systems",
+        ResumeProfile(name="Account Name", github_url="github.com/jane"),
+    )
+
+    assert "Jane Doe" in result
+    assert "Account Name" not in result
+    assert "https://github.com/jane" in result
 
 
 @pytest.mark.asyncio

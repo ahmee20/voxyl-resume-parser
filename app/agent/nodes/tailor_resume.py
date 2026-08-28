@@ -5,6 +5,8 @@ Fills the gaps identified by analyze_gaps into the candidate's HTML resume templ
 preserving the original structure, CSS classes, and layout.
 """
 
+import html
+import json
 import re
 import time
 import structlog
@@ -29,7 +31,70 @@ RULES:
 """
 
 
-def run_resume_tailoring(resume_html: str, gap_analysis: str) -> str:
+def _gap_items(gap_analysis: str) -> tuple[list[str], list[str]]:
+    try:
+        parsed = json.loads(gap_analysis)
+    except (TypeError, json.JSONDecodeError):
+        return [], []
+    if not isinstance(parsed, dict):
+        return [], []
+
+    added = parsed.get("added_keywords", [])
+    added_keywords = [
+        item.get("keyword", "").strip()
+        for item in added
+        if isinstance(item, dict) and isinstance(item.get("keyword"), str) and item.get("keyword", "").strip()
+    ]
+    removed = parsed.get("removed_keywords", [])
+    removed_keywords = [item.strip() for item in removed if isinstance(item, str) and item.strip()]
+    return added_keywords, removed_keywords
+
+
+def _rewrite_text_nodes(resume_html: str, added_keywords: list[str], removed_keywords: list[str]) -> str:
+    parts = re.split(r"(<[^>]+>)", resume_html)
+    text_indexes = range(0, len(parts), 2)
+    for index in text_indexes:
+        text = parts[index]
+        for keyword in removed_keywords:
+            text = re.sub(rf"(?<!\w){re.escape(keyword)}(?!\w)", "", text, flags=re.IGNORECASE)
+        parts[index] = text
+
+    searchable_text = " ".join(parts[index] for index in text_indexes).casefold()
+    missing = [keyword for keyword in added_keywords if not re.search(
+        rf"(?<!\w){re.escape(keyword.casefold())}(?!\w)", searchable_text
+    )]
+    if missing:
+        skills_markup = "<ul>" + "".join(f"<li>{html.escape(keyword)}</li>" for keyword in missing) + "</ul>"
+        section = f'<section class="resume-section"><h2>Skills</h2>{skills_markup}</section>'
+        rewritten_html = "".join(parts)
+        closing_tag = re.search(r"</div>\s*$", rewritten_html, re.IGNORECASE)
+        if closing_tag:
+            return rewritten_html[:closing_tag.start()] + section + rewritten_html[closing_tag.start():]
+        else:
+            return rewritten_html + section
+    return "".join(parts)
+
+
+def _ensure_profile_links(resume_html: str, user_profile: dict | None) -> str:
+    if not user_profile:
+        return resume_html
+    links = []
+    for label, key in (("GitHub", "github_url"), ("LinkedIn", "linkedin_url"), ("Portfolio", "portfolio_url")):
+        value = user_profile.get(key)
+        if not isinstance(value, str) or not value.strip() or value.casefold() in resume_html.casefold():
+            continue
+        url = value.strip() if re.match(r"^https?://", value.strip(), re.IGNORECASE) else f"https://{value.strip()}"
+        links.append(f'<a href="{html.escape(url, quote=True)}">{label}</a>')
+    if not links:
+        return resume_html
+    contact_markup = '<p class="profile-links">' + " | ".join(links) + "</p>"
+    header = re.search(r"<header\b[^>]*>", resume_html, re.IGNORECASE)
+    if header:
+        return resume_html[:header.end()] + contact_markup + resume_html[header.end():]
+    return contact_markup + resume_html
+
+
+def run_resume_tailoring(resume_html: str, gap_analysis: str, user_profile: dict | None = None) -> str:
     """Invoke LLM to update HTML resume based on gap analysis."""
     llm = get_llm(temperature=0.1)
     messages = [
@@ -37,6 +102,7 @@ def run_resume_tailoring(resume_html: str, gap_analysis: str) -> str:
         HumanMessage(
             content=(
                 f"### GAP ANALYSIS & KEYWORD RECOMMENDATIONS:\n{gap_analysis}\n\n"
+                f"### USER PROFILE LINKS (include these in the contact header):\n{json.dumps(user_profile or {}, ensure_ascii=False)}\n\n"
                 f"### BASE RESUME HTML:\n{resume_html}\n\n"
                 "Produce the tailored HTML resume:"
             )
@@ -54,11 +120,15 @@ def run_resume_tailoring(resume_html: str, gap_analysis: str) -> str:
     # 2. Extract HTML div block
     fence_match = re.search(r"```(?:html)?\s*(<div.*?>.*?</div>)\s*```", cleaned, re.DOTALL | re.IGNORECASE)
     if fence_match:
-        return fence_match.group(1).strip()
+        candidate_html = fence_match.group(1).strip()
+        added, removed = _gap_items(gap_analysis)
+        return _ensure_profile_links(_rewrite_text_nodes(candidate_html, added, removed), user_profile)
 
     div_match = re.search(r"(<div.*?>.*?</div>)", cleaned, re.DOTALL | re.IGNORECASE)
     if div_match:
-        return div_match.group(1).strip()
+        candidate_html = div_match.group(1).strip()
+        added, removed = _gap_items(gap_analysis)
+        return _ensure_profile_links(_rewrite_text_nodes(candidate_html, added, removed), user_profile)
 
     # 3. Code fence stripping fallback
     if cleaned.startswith("```html"):
@@ -86,7 +156,8 @@ def run_resume_tailoring(resume_html: str, gap_analysis: str) -> str:
         )
         return resume_html
 
-    return candidate_html
+    added, removed = _gap_items(gap_analysis)
+    return _ensure_profile_links(_rewrite_text_nodes(candidate_html, added, removed), user_profile)
 
 
 def tailor_resume_node(state: GraphState) -> GraphState:
@@ -99,13 +170,14 @@ def tailor_resume_node(state: GraphState) -> GraphState:
 
     resume_html = state.get("resume_html", "")
     gap_analysis = state.get("gap_analysis", "")
+    user_profile = state.get("user_profile") or {}
 
     if not resume_html:
         log.warning("tailor_resume_missing_html", application_id=app_id)
         tailored_html = f'<div class="resume"><p>{state.get("resume_text", "")}</p></div>'
     else:
         try:
-            tailored_html = run_resume_tailoring(resume_html, gap_analysis)
+            tailored_html = run_resume_tailoring(resume_html, gap_analysis, user_profile)
         except Exception as exc:
             log.error("tailor_resume_failed", error=str(exc), application_id=app_id)
             # Fallback to base HTML if tailoring fails

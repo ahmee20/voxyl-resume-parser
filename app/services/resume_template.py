@@ -164,13 +164,12 @@ def _render_lines(lines: list[str], section_name: str) -> str:
 
 def render_resume_html(resume_text: str, profile: ResumeProfile | None = None) -> str:
     """Render resume text as polished, PDF-ready HTML."""
-    # Never trust account profile data for resume identity fields. The uploaded
-    # resume text is the source of truth, so the renderer only derives identity
-    # from that text.
-    profile = ResumeProfile()
+    # Resume text remains the source of truth for identity; profile links may
+    # still be added to the contact row.
+    profile = profile or ResumeProfile()
     intro, sections = _split_resume_text(resume_text)
     fallback_name = intro[0] if intro else "Candidate"
-    display_name = profile.name or fallback_name
+    display_name = fallback_name
     title = intro[1] if len(intro) > 1 and not profile.email else ""
     contact_html = _render_contact_links(profile, intro)
 

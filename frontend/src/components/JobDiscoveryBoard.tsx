@@ -3,6 +3,7 @@ import type { Job, Resume } from '../types/api';
 import { jobsApi, applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { JobDetailsModal } from './JobDetailsModal';
+import { TailorNoticeModal } from './TailorNoticeModal';
 import {
   Briefcase,
   Compass,
@@ -107,6 +108,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
   const [runningJobId, setRunningJobId] = useState<number | null>(null);
   const [hasSessionSnapshot, setHasSessionSnapshot] = useState<boolean>(false);
+  const [showTailorNotice, setShowTailorNotice] = useState<boolean>(false);
 
   const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
 
@@ -267,6 +269,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     if (!user || !activeResume || selectedJobIds.length === 0) return;
 
     try {
+      setShowTailorNotice(true);
       setIsBatchRunning(true);
       await applicationsApi.runBatch(selectedJobIds, activeResume.id, user.id);
 
@@ -294,6 +297,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     e.stopPropagation();
     if (!activeResume) return;
     try {
+      setShowTailorNotice(true);
       setRunningJobId(job.id);
       const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user?.id);
 
@@ -318,6 +322,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
   return (
     <div className="relative space-y-6 pb-20">
+      <TailorNoticeModal open={showTailorNotice} onClose={() => setShowTailorNotice(false)} />
       <div className="rounded-[34px] px-4 py-4 sm:px-7 sm:py-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">

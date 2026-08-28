@@ -5,9 +5,8 @@ app/api/jobs.py — Job discovery and listing endpoints.
 from typing import Any, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import String, cast, func, not_, or_, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.agent.nodes.enrich_jobs import enrich_jobs_node
 from app.agent.nodes.filter_jobs import filter_relevant_node
@@ -87,32 +86,25 @@ class DiscoveryRequest(BaseModel):
     max_results: Optional[int] = None
 
 
-def _job_to_response(
-    job: Job,
-    application_id: int | None = None,
-    application_status: str | None = None,
-    application_applied_status: str | None = None,
-    application_tailored_html: str | None = None,
-    application_rendered_pdf_url: str | None = None,
-    application_email_draft: str | None = None,
-    application_ats_score: int | None = None,
-    application_gap_analysis: str | None = None,
-    application_approval_attempts: int | None = None,
-    application_drive_folder_url: str | None = None,
-) -> JobResponse:
+def _job_to_response(job: Job, application_data: dict[str, Any] | None = None) -> JobResponse:
     latest_app_summary = None
-    has_assets = bool(application_tailored_html or application_rendered_pdf_url or application_email_draft)
-    if application_id is not None:
+    if application_data is not None:
+        has_assets = bool(
+            application_data.get("application_tailored_html")
+            or application_data.get("application_rendered_pdf_url")
+            or application_data.get("application_email_draft")
+        )
         latest_app_summary = JobApplicationSummary(
-            id=application_id,
-            status=_effective_application_status(application_status, has_assets),
-            applied_status=application_applied_status or "no",
-            pdf_url=application_rendered_pdf_url or application_drive_folder_url,
-            email_draft=application_email_draft,
-            tailored_html=application_tailored_html,
-            ats_score=application_ats_score,
-            gap_analysis=application_gap_analysis,
-            approval_attempts=application_approval_attempts or 1,
+            id=application_data["application_id"],
+            status=_effective_application_status(application_data.get("application_status"), has_assets),
+            applied_status=application_data.get("application_applied_status") or "no",
+            pdf_url=application_data.get("application_rendered_pdf_url")
+            or application_data.get("application_drive_folder_url"),
+            email_draft=application_data.get("application_email_draft"),
+            tailored_html=application_data.get("application_tailored_html"),
+            ats_score=application_data.get("application_ats_score"),
+            gap_analysis=application_data.get("application_gap_analysis"),
+            approval_attempts=application_data.get("application_approval_attempts") or 1,
         )
 
     return JobResponse(
@@ -128,23 +120,6 @@ def _job_to_response(
         filter_reason=job.filter_reason,
         apollo_enrichment=job.apollo_enrichment,
         application=latest_app_summary,
-    )
-
-
-def _latest_application_is_tailored(application_alias: Any) -> Any:
-    """Return a SQLAlchemy expression that identifies a tailored application row."""
-    return or_(
-        application_alias.tailored_html.is_not(None),
-        application_alias.rendered_pdf_url.is_not(None),
-        application_alias.email_draft.is_not(None),
-        cast(application_alias.status, String).in_(
-            [
-                ApplicationStatus.saved.value,
-                ApplicationStatus.pending_approval.value,
-                ApplicationStatus.approved.value,
-                ApplicationStatus.sent.value,
-            ]
-        ),
     )
 
 
@@ -177,74 +152,73 @@ async def list_jobs(
             detail="Not authenticated. Please log in with Google.",
         )
 
-    # 2. Build user-scoped query
+    # 2. Load jobs first, then annotate with latest application data in a second query.
+    jobs_stmt = select(Job).where(Job.user_id == resolved_user_id)
+
+    if qualified is not None:
+        jobs_stmt = jobs_stmt.where(Job.is_qualified == qualified)
+
+    jobs_stmt = jobs_stmt.order_by(Job.id.desc())
+
+    if latest:
+        jobs_stmt = jobs_stmt.limit(limit)
+    else:
+        jobs_stmt = jobs_stmt.offset(offset).limit(limit)
+
+    job_rows = (await db.execute(jobs_stmt)).scalars().all()
+    if not job_rows:
+        return []
+
+    job_ids = [job.id for job in job_rows]
     latest_app_subquery = (
         select(Application.job_id, func.max(Application.id).label("max_application_id"))
-        .where(Application.user_id == resolved_user_id)
+        .where(Application.user_id == resolved_user_id, Application.job_id.in_(job_ids))
         .group_by(Application.job_id)
         .subquery()
     )
-    latest_app_alias = aliased(Application)
-    stmt = (
+    app_stmt = (
         select(
-            Job,
-            latest_app_alias.id.label("application_id"),
-            cast(latest_app_alias.status, String).label("application_status"),
-            cast(latest_app_alias.applied_status, String).label("application_applied_status"),
-            latest_app_alias.tailored_html.label("application_tailored_html"),
-            latest_app_alias.rendered_pdf_url.label("application_rendered_pdf_url"),
-            latest_app_alias.email_draft.label("application_email_draft"),
-            latest_app_alias.ats_score.label("application_ats_score"),
-            latest_app_alias.gap_analysis.label("application_gap_analysis"),
-            latest_app_alias.approval_attempts.label("application_approval_attempts"),
-            latest_app_alias.drive_folder_url.label("application_drive_folder_url"),
+            Application.job_id.label("job_id"),
+            Application.id.label("application_id"),
+            cast(Application.status, String).label("application_status"),
+            cast(Application.applied_status, String).label("application_applied_status"),
+            Application.tailored_html.label("application_tailored_html"),
+            Application.rendered_pdf_url.label("application_rendered_pdf_url"),
+            Application.email_draft.label("application_email_draft"),
+            Application.ats_score.label("application_ats_score"),
+            Application.gap_analysis.label("application_gap_analysis"),
+            Application.approval_attempts.label("application_approval_attempts"),
+            Application.drive_folder_url.label("application_drive_folder_url"),
         )
-        .outerjoin(latest_app_subquery, Job.id == latest_app_subquery.c.job_id)
-        .outerjoin(latest_app_alias, latest_app_alias.id == latest_app_subquery.c.max_application_id)
-        .where(Job.user_id == resolved_user_id)
+        .join(latest_app_subquery, Application.id == latest_app_subquery.c.max_application_id)
     )
+    app_rows = (await db.execute(app_stmt)).mappings().all()
+    app_map = {row["job_id"]: dict(row) for row in app_rows}
 
-    if qualified is not None:
-        stmt = stmt.where(Job.is_qualified == qualified)
-
-    tailored_expr = _latest_application_is_tailored(latest_app_alias)
-    if tailored is True:
-        stmt = stmt.where(latest_app_alias.id.is_not(None)).where(tailored_expr)
-    elif tailored is False:
-        stmt = stmt.where(
-            or_(
-                latest_app_alias.id.is_(None),
-                not_(tailored_expr),
-            )
+    def _is_tailored_summary(summary: dict[str, Any]) -> bool:
+        status = summary.get("application_status") or ""
+        has_assets = bool(
+            summary.get("application_tailored_html")
+            or summary.get("application_rendered_pdf_url")
+            or summary.get("application_email_draft")
         )
-
-    stmt = stmt.order_by(Job.id.desc())
-
-    if latest:
-        stmt = stmt.limit(limit)
-    else:
-        stmt = stmt.offset(offset).limit(limit)
-
-    result = await db.execute(stmt)
-    rows = result.all()
+        return status in {
+            ApplicationStatus.saved.value,
+            ApplicationStatus.pending_approval.value,
+            ApplicationStatus.approved.value,
+            ApplicationStatus.sent.value,
+        } or has_assets
 
     response_items = []
-    for row in rows:
-        response_items.append(
-            _job_to_response(
-                row[0],
-                application_id=row[1],
-                application_status=row[2],
-                application_applied_status=row[3],
-                application_tailored_html=row[4],
-                application_rendered_pdf_url=row[5],
-                application_email_draft=row[6],
-                application_ats_score=row[7],
-                application_gap_analysis=row[8],
-                application_approval_attempts=row[9],
-                application_drive_folder_url=row[10],
-            )
-        )
+    for job in job_rows:
+        summary = app_map.get(job.id)
+        if tailored is True and not summary:
+            continue
+        if tailored is True and summary and not _is_tailored_summary(summary):
+            continue
+        if tailored is False and summary and _is_tailored_summary(summary):
+            continue
+        response_items.append(_job_to_response(job, summary))
 
     return response_items
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Job, Resume } from '../types/api';
 import { applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { TailorNoticeModal } from './TailorNoticeModal';
 import {
   X,
   Building2,
@@ -34,6 +35,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   onViewTailored,
 }) => {
   const [isStarting, setIsStarting] = useState(false);
+  const [showTailorNotice, setShowTailorNotice] = useState(false);
   const { user } = useAuth();
 
   if (!job) return null;
@@ -46,6 +48,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   const handleStartTailoring = async () => {
     if (!activeResume || !user) return;
     try {
+      setShowTailorNotice(true);
       setIsStarting(true);
       const res = await applicationsApi.runSingleJob(job.id, activeResume.id, user.id);
       onTailorStarted(res.application_id);
@@ -58,6 +61,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07110d]/30 p-4 backdrop-blur-md">
+      <TailorNoticeModal open={showTailorNotice} onClose={() => setShowTailorNotice(false)} />
       <div
         className="panel-air flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px]"
         onClick={(e) => e.stopPropagation()}

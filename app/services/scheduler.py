@@ -87,7 +87,7 @@ async def _run_auto_cycle_for_user(user: User) -> None:
             log.warning("scheduler_skip_user_no_resume", user_id=user.id)
             return
 
-        preferred_roles = _clean_string_list(user.preferred_roles)
+        preferred_roles = _clean_string_list(user.preferred_roles)[:1]
         preferred_countries = _clean_string_list(user.preferred_countries) or ["REMOTE", "US"]
         queries = preferred_roles
 

@@ -222,7 +222,7 @@ async def update_profile(
     if payload.preferred_name is not None:
         current_user.preferred_name = _clean_optional(payload.preferred_name) or current_user.name
     if payload.preferred_roles is not None:
-        current_user.preferred_roles = _clean_string_list(payload.preferred_roles)
+        current_user.preferred_roles = _clean_string_list(payload.preferred_roles)[:1]
     if payload.preferred_countries is not None:
         current_user.preferred_countries = _clean_string_list(payload.preferred_countries)
     if payload.send_mode is not None:

@@ -257,7 +257,7 @@ async def discover_jobs_for_user(
     # 2. Prepare discovery parameters
     explicit_role = payload.target_role.strip() if payload.target_role and payload.target_role.strip() else None
     preferred_roles = [role.strip() for role in (payload.preferred_roles or []) if role and role.strip()]
-    preferred_roles = preferred_roles[:3]
+    preferred_roles = preferred_roles[:1]
     queries = preferred_roles or ([explicit_role] if explicit_role else None)
     countries = payload.countries if (payload.countries and len(payload.countries) > 0) else ["US"]
 
@@ -362,7 +362,7 @@ async def discover_and_apply_for_user(
     # 2. Prepare discovery parameters
     explicit_role = payload.target_role.strip() if payload.target_role and payload.target_role.strip() else None
     preferred_roles = [role.strip() for role in (payload.preferred_roles or []) if role and role.strip()]
-    preferred_roles = preferred_roles[:3]
+    preferred_roles = preferred_roles[:1]
     queries = preferred_roles or ([explicit_role] if explicit_role else None)
     countries = payload.countries if (payload.countries and len(payload.countries) > 0) else ["US"]
 

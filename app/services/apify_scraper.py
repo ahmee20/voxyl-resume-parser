@@ -95,8 +95,6 @@ def _normalize_item(
     idx: int,
     target_role: str,
     location_str: str,
-    cutoff: datetime | None,
-    apply_cutoff: bool,
 ) -> Optional[dict[str, Any]]:
     raw_url = (
         item_dict.get("link")
@@ -146,10 +144,6 @@ def _normalize_item(
         or item_dict.get("postingDate")
     )
 
-    posted_dt = _parse_timestamp(raw_posted)
-    if apply_cutoff and cutoff and posted_dt and posted_dt < cutoff:
-        return None
-
     clean_title = _clean_str(raw_title, default=target_role)
     clean_company = _clean_str(raw_company, default="Company")
     clean_url = _clean_str(raw_url, default=f"https://linkedin.com/jobs/view/{idx}")
@@ -188,9 +182,6 @@ def scrape_jobs_from_apify(
     location_str = ", ".join(country_names) if country_names else "Remote"
     limit = max_results if max_results is not None else settings.apify_max_results
     limit = limit if limit and limit > 0 else None
-    window = timedelta(hours=posted_within_hours) if posted_within_hours else None
-    cutoff = datetime.now(timezone.utc) - window if window else None
-
     if not settings.apify_api_token or settings.apify_api_token == "test-apify-token":
         log.warning("apify_token_not_configured_using_mock_results", queries=queries, location=location_str)
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -260,7 +251,6 @@ def scrape_jobs_from_apify(
         log.info("apify_raw_items_fetched", count=len(dataset_items))
 
         normalized_jobs: list[dict[str, Any]] = []
-        cutoff_skipped_jobs: list[dict[str, Any]] = []
         for idx, item in enumerate(dataset_items if limit is None else dataset_items[:limit]):
             item_dict = _item_to_dict(item)
             normalized = _normalize_item(
@@ -268,34 +258,17 @@ def scrape_jobs_from_apify(
                 idx=idx,
                 target_role=target_role,
                 location_str=location_str,
-                cutoff=cutoff,
-                apply_cutoff=True,
             )
             if normalized:
                 normalized_jobs.append(normalized)
-                continue
 
-            if cutoff:
-                fallback = _normalize_item(
-                    item_dict,
-                    idx=idx,
-                    target_role=target_role,
-                    location_str=location_str,
-                    cutoff=cutoff,
-                    apply_cutoff=False,
-                )
-                if fallback:
-                    cutoff_skipped_jobs.append(fallback)
-
-        if not normalized_jobs and cutoff_skipped_jobs:
-            log.warning(
-                "apify_cutoff_relaxed",
-                skipped=len(cutoff_skipped_jobs),
-                reason="all_jobs_fell_outside_window_or_missing_parseable_timestamp",
-            )
-            normalized_jobs = cutoff_skipped_jobs
-
-        log.info("apify_scrape_success", total_normalized=len(normalized_jobs))
+        log.info(
+            "apify_scrape_success",
+            raw_count=len(dataset_items),
+            total_normalized=len(normalized_jobs),
+            dropped_count=len(dataset_items) - len(normalized_jobs),
+            drop_reason="none: local date cutoff disabled",
+        )
         return normalized_jobs
 
     except Exception as exc:

@@ -9,8 +9,11 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
 from app.models.job import Job
+
+log = structlog.get_logger(__name__)
 
 
 def _normalize_url(value: Any) -> str:
@@ -48,9 +51,17 @@ async def split_fresh_and_known_jobs(
     for job in jobs_list:
         url = _normalize_url(job.get("url"))
         if not url:
+            log.warning("job_dropped", reason="missing_url", title=job.get("title"), company=job.get("company"))
             continue
         if url in seen_urls or url in known_urls:
             known_jobs.append(job)
+            log.info(
+                "job_dropped",
+                reason="duplicate_url_in_batch" if url in seen_urls else "already_known_for_user",
+                url=url,
+                title=job.get("title"),
+                company=job.get("company"),
+            )
             continue
         seen_urls.add(url)
         fresh_jobs.append(job)

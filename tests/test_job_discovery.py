@@ -87,8 +87,11 @@ async def test_filter_relevant_node():
         ],
     }
     updated = filter_relevant_node(state)
-    assert len(updated["relevant_jobs"]) == 1
-    assert updated["relevant_jobs"][0]["title"] == "Senior AI Engineer"
+    assert len(updated["relevant_jobs"]) == 2
+    assert {job["title"] for job in updated["relevant_jobs"]} == {
+        "Senior AI Engineer",
+        "Unpaid Summer Internship",
+    }
 
 
 @pytest.mark.asyncio

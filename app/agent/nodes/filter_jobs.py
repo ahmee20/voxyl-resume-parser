@@ -10,10 +10,7 @@ log = structlog.get_logger(__name__)
 
 
 def filter_relevant_node(state: GraphState) -> GraphState:
-    """
-    Filter scraped/enriched jobs down to relevant, high-quality matches.
-    Checks that the job contains meaningful descriptions and required title domains.
-    """
+    """Pass through all scraped jobs without title or description exclusions."""
     start_time = time.perf_counter()
     app_id = state.get("application_id")
     user_id = state.get("user_id")
@@ -24,13 +21,7 @@ def filter_relevant_node(state: GraphState) -> GraphState:
     relevant_jobs = state.get("relevant_jobs")
 
     if relevant_jobs is None or len(relevant_jobs) == 0:
-        filtered = []
-        for job in enriched_jobs:
-            title = str(job.get("title") or "").lower()
-            description = str(job.get("description") or "").lower()
-            if len(description) >= 10 and not any(kw in title for kw in ["volunteer", "unpaid"]):
-                filtered.append(job)
-        relevant_jobs = filtered if filtered else enriched_jobs
+        relevant_jobs = enriched_jobs
 
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
     log.info("node_exit", node="filter_relevant", latency_ms=elapsed_ms, count=len(relevant_jobs))

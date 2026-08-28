@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, Plus, Search, X } from 'lucide-react';
+import { Check, Search } from 'lucide-react';
 import { authApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,7 +30,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
   const { user, setUser } = useAuth();
   const initialRoles = useMemo(() => {
     const roles = user?.preferred_roles ?? [];
-    return roles.length > 0 ? roles.slice(0, 3) : [''];
+    return roles.length > 0 ? roles.slice(0, 1) : [''];
   }, [user?.preferred_roles]);
 
   const [preferredName, setPreferredName] = useState(user?.preferred_name || user?.name || '');
@@ -49,7 +49,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
   useEffect(() => {
     setPreferredName(user?.preferred_name || user?.name || '');
     const nextRoles = user?.preferred_roles ?? [];
-    setRoles(nextRoles.length > 0 ? nextRoles.slice(0, 3) : ['']);
+    setRoles(nextRoles.length > 0 ? nextRoles.slice(0, 1) : ['']);
     setSelectedCountries(user?.preferred_countries?.length ? user.preferred_countries.slice(0, 3) : ['REMOTE', 'US']);
     setCountryQuery('');
     setSendMode(user?.send_mode || 'manual');
@@ -73,29 +73,16 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
     });
   };
 
-  const addRoleField = () => {
-    setRoles((current) => (current.length >= 3 ? current : [...current, '']));
-  };
-
-  const removeRoleField = (index: number) => {
+  const updateRole = (value: string) => {
     setRoles((current) => {
-      if (current.length === 1) return [''];
-      return current.filter((_, itemIndex) => itemIndex !== index);
-    });
-  };
-
-  const updateRole = (index: number, value: string) => {
-    setRoles((current) => {
-      const next = [...current];
-      next[index] = value;
-      return next;
+      return [value, ...current.slice(1)];
     });
   };
 
   const saveProfile = async () => {
     setError(null);
     setIsSaving(true);
-    const cleanedRoles = roles.map((role) => role.trim()).filter(Boolean).slice(0, 3);
+    const cleanedRoles = roles.map((role) => role.trim()).filter(Boolean).slice(0, 1);
     const cleanedCountries = selectedCountries.slice(0, 3);
 
     try {
@@ -198,41 +185,19 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
           </div>
 
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div>
               <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-500">
-                Preferred roles
+                Preferred role
               </span>
-              <button
-                type="button"
-                onClick={addRoleField}
-                disabled={roles.length >= 3}
-                className="inline-flex items-center gap-1 rounded-full border border-border bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 transition hover:border-primary-200 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add role
-              </button>
             </div>
 
             <div className="space-y-2">
-              {roles.map((role, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <input
-                    value={role}
-                    onChange={(event) => updateRole(index, event.target.value)}
-                    placeholder={index === 0 ? 'AI Engineer' : 'Add another role'}
-                    className="w-full rounded-full border border-border bg-white/90 px-5 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeRoleField(index)}
-                    disabled={roles.length === 1}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-white/90 text-slate-400 transition hover:border-rose-200 hover:text-rose-500 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label="Remove role"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+              <input
+                value={roles[0] || ''}
+                onChange={(event) => updateRole(event.target.value)}
+                placeholder="AI Engineer"
+                className="w-full rounded-full border border-border bg-white/90 px-5 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+              />
             </div>
           </div>
 

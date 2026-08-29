@@ -46,6 +46,7 @@ def render_pdf_node(state: GraphState) -> GraphState:
             tailored_resume_html=tailored_html,
             resume_text=state.get("resume_text", ""),
             profile=profile,
+            gap_analysis=state.get("gap_analysis", ""),
         )
 
     use_template = bool(template_data)

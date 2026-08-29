@@ -22,22 +22,29 @@ RESUME_TEMPLATE_PROMPT = """You convert a tailored resume into structured JSON f
 
 Return JSON only. Do not add markdown, commentary, or code fences.
 
+Source-of-truth precedence:
+1. TAILORED RESUME HTML is the primary source of truth.
+2. GAP ANALYSIS is the authoritative instruction for keyword additions and removals.
+3. BASE RESUME TEXT is only a fallback when tailored HTML is incomplete or missing a detail.
+
 Rules:
-1. Use only information explicitly present in the resume text/HTML and profile block.
-2. If a field or section is missing, omit that key entirely.
-3. Do not invent titles, dates, employers, degrees, skills, or certifications.
-4. If the profile block conflicts with the resume text, the resume text wins. Do not invent the candidate's name, email, or links from account-holder data unless those details appear in the resume itself.
-5. Recognize these section aliases and map them to the canonical key instead of skipping them:
+1. Use the tailored resume content first. Preserve the edits already made by the tailoring step, including summary revisions, skill emphasis, and any removed keywords.
+2. If a keyword or phrase appears in the gap analysis as removed_keywords, do not reintroduce it into the JSON payload from the base resume text.
+3. If the gap analysis includes added_keywords, prefer wording that matches the tailored resume and the targeted language already present in the tailored HTML. Do not revert to the original base resume wording when the tailored version intentionally changes it.
+4. If a field or section is missing from the tailored resume, fall back to the base resume text only for the missing details.
+5. Do not invent titles, dates, employers, degrees, skills, or certifications.
+6. If the profile block conflicts with the tailored resume or base text, the resume text wins. Do not invent the candidate's name, email, or links from account-holder data unless those details appear in the resume itself.
+7. Recognize these section aliases and map them to the canonical key instead of skipping them:
    - summary: professional summary, summary, profile, overview
    - skills: technical skills, skills, core competencies, competencies
    - experience: professional experience, work experience, industry experience, job experience, previous experience, employment history, career history
    - projects: projects, key projects, selected projects, relevant projects
    - education: education, academic background, academics
    - certifications: certifications, certifications & achievements, achievements, honors, awards
-6. Prefer concise, clean values that look natural in a resume template.
-7. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
-8. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
-9. Do not emit empty strings, empty arrays, or extra keys.
+8. Prefer concise, clean values that look natural in a resume template.
+9. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
+10. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
+11. Do not emit empty strings, empty arrays, or extra keys.
 
 Schema:
 {
@@ -202,6 +209,7 @@ def build_pdfco_resume_template_data(
     tailored_resume_html: str,
     resume_text: str,
     profile: ResumeProfile | None = None,
+    gap_analysis: str | None = None,
 ) -> dict[str, Any] | None:
     """
     Convert a tailored resume into the structured JSON object expected by the PDF.co template.
@@ -212,13 +220,15 @@ def build_pdfco_resume_template_data(
         return None
 
     llm = get_llm(temperature=0.0, max_tokens=settings.llm_max_output_tokens)
+    gap_analysis_block = gap_analysis.strip() if isinstance(gap_analysis, str) else "{}"
     messages = [
         SystemMessage(content=RESUME_TEMPLATE_PROMPT),
         HumanMessage(
             content=(
                 f"### CANDIDATE PROFILE\n{_profile_block(profile)}\n\n"
                 f"### TAILORED RESUME HTML\n{tailored_resume_html}\n\n"
-                f"### BASE RESUME TEXT\n{resume_text}\n\n"
+                f"### GAP ANALYSIS (source-of-truth instructions for tailoring changes)\n{gap_analysis_block}\n\n"
+                f"### BASE RESUME TEXT (fallback only)\n{resume_text}\n\n"
                 "Return the JSON payload for the PDF.co template now."
             )
         ),

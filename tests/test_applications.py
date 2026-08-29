@@ -14,7 +14,7 @@ from app.agent.state import GraphState
 from app.models.resume import Resume
 from app.models.user import User
 from app.services.resume_template import ResumeProfile, render_resume_html
-from app.services.pdfco_resume_payload import _extract_json
+from app.services.pdfco_resume_payload import _extract_json, build_pdfco_resume_template_data
 from app.services.llm import _retry_once
 
 
@@ -138,6 +138,37 @@ def test_render_resume_html_uses_profile_links_without_replacing_resume_identity
 
 def test_pdfco_payload_parser_recovers_malformed_llm_json():
     assert _extract_json('{"summary":"unterminated}') == {"summary": "unterminated}"}
+
+
+def test_pdfco_payload_prefers_tailored_resume_and_gap_analysis_over_base_resume():
+    tailored_html = '<div class="resume"><h1>Jane Doe</h1><p>Python Developer with LangGraph and agentic systems</p></div>'
+    base_resume_text = "Python Developer with legacy tooling and no AI experience."
+    gap_analysis = json.dumps(
+        {
+            "added_keywords": [{"keyword": "LangGraph", "evidence": "Python Developer"}],
+            "removed_keywords": ["legacy tooling"],
+        }
+    )
+
+    with patch("app.services.pdfco_resume_payload.get_llm") as mock_get_llm:
+        mock_get_llm.return_value.invoke.return_value = MagicMock(
+            content='{"summary": "Python Developer with LangGraph and agentic systems"}'
+        )
+
+        result = build_pdfco_resume_template_data(
+            tailored_resume_html=tailored_html,
+            resume_text=base_resume_text,
+            profile=None,
+            gap_analysis=gap_analysis,
+        )
+
+    assert result is not None
+    assert result["summary"] == "Python Developer with LangGraph and agentic systems"
+    prompt_text = mock_get_llm.return_value.invoke.call_args[0][0][1].content
+    assert "### TAILORED RESUME HTML" in prompt_text
+    assert "### GAP ANALYSIS (source-of-truth instructions for tailoring changes)" in prompt_text
+    assert "LangGraph" in prompt_text
+    assert "legacy tooling" in prompt_text
 
 
 def test_llm_retries_same_provider_once_after_error():

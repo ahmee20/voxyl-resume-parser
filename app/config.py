@@ -26,9 +26,8 @@ class Settings(BaseSettings):
 
     # ── Google OAuth ──────────────────────────────────────────────────────────
     google_client_id: str
-    google_client_secret: str
-    google_redirect_uri: str = "https://voxyl-resume.onrender.com/auth/google/callback"
-    frontend_url: str = "https://voxyl-resume.netlify.app/"
+    google_redirect_uri: str = ""
+    frontend_url: str = "/"
     supabase_pooler_url: str = ""
 
     # ── LLM Configuration ─────────────────────────────────────────────────────

@@ -103,10 +103,20 @@ async def get_current_user(
     return user
 
 
+def _get_redirect_uri(request: Request) -> str:
+    if settings.google_redirect_uri and "onrender.com" not in settings.google_redirect_uri and "netlify.app" not in settings.google_redirect_uri:
+        return settings.google_redirect_uri
+
+    # Dynamically build callback URI using the current request host (Vercel domain or localhost)
+    proto = request.headers.get("x-forwarded-proto", "https" if request.url.is_secure else "http")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+    return f"{proto}://{host}/auth/google/callback"
+
+
 @router.get("/google/login", summary="Initiate Google OAuth login")
 async def google_login(request: Request):
     """Redirect to Google OAuth consent screen for basic sign-in."""
-    redirect_uri = settings.google_redirect_uri
+    redirect_uri = _get_redirect_uri(request)
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
 
@@ -120,6 +130,7 @@ async def google_callback(
     encrypt refresh token, upsert user in database, establish session,
     and redirect back to frontend.
     """
+    redirect_uri = _get_redirect_uri(request)
     token = None
     user_info = None
     raw_refresh_token = None
@@ -146,7 +157,7 @@ async def google_callback(
                         "client_secret": settings.google_client_secret,
                         "code": code,
                         "grant_type": "authorization_code",
-                        "redirect_uri": settings.google_redirect_uri,
+                        "redirect_uri": redirect_uri,
                     },
                 )
                 if token_resp.status_code == 200:
@@ -201,9 +212,16 @@ async def google_callback(
     request.session["user_id"] = user.id
     request.session["user_email"] = user.email
 
-    # 5. Redirect back to frontend dashboard
-    frontend_url = settings.frontend_url.rstrip("/") + "/"
-    return RedirectResponse(url=frontend_url, status_code=status.HTTP_302_FOUND)
+    # 5. Redirect back to frontend dashboard on current Vercel host
+    target_url = "/"
+    if (
+        settings.frontend_url
+        and "netlify.app" not in settings.frontend_url
+        and "onrender.com" not in settings.frontend_url
+        and settings.frontend_url != "/"
+    ):
+        target_url = settings.frontend_url.rstrip("/") + "/"
+    return RedirectResponse(url=target_url, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/me", response_model=UserResponse, summary="Get current logged in user")

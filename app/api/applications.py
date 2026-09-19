@@ -20,7 +20,7 @@ from typing import Any, Optional
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import String, cast, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.nodes.analyze_gaps import analyze_gaps_node
@@ -231,9 +231,14 @@ async def _persist_pipeline_results(
             tailored_resume_id = None
             if persist_tailored_resume and tailored_html:
                 try:
+                    ver_stmt = select(func.max(Resume.version)).where(Resume.user_id == user_id)
+                    ver_res = await db.execute(ver_stmt)
+                    current_max = ver_res.scalar() or base_resume_version or 1
+                    next_version = current_max + 1
+
                     tailored_resume = Resume(
                         user_id=user_id,
-                        version=base_resume_version + 1,
+                        version=next_version,
                         source_text=base_resume_text,
                         source_html=tailored_html,
                         is_base=False,

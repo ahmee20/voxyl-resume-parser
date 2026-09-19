@@ -4,6 +4,7 @@ import { jobsApi, applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { JobDetailsModal } from './JobDetailsModal';
 import { TailorNoticeModal } from './TailorNoticeModal';
+import { BatchUnavailableModal } from './BatchUnavailableModal';
 import {
   Briefcase,
   Compass,
@@ -109,10 +110,11 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const [isDiscovering, setIsDiscovering] = useState<boolean>(false);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [inspectingJob, setInspectingJob] = useState<Job | null>(null);
-  const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
+  const [isBatchRunning] = useState<boolean>(false);
   const [runningJobId, setRunningJobId] = useState<number | null>(null);
   const [hasSessionSnapshot, setHasSessionSnapshot] = useState<boolean>(false);
   const [showTailorNotice, setShowTailorNotice] = useState<boolean>(false);
+  const [showBatchUnavailableModal, setShowBatchUnavailableModal] = useState<boolean>(false);
   const selectedCountriesRef = useRef(selectedCountries);
 
   const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
@@ -291,28 +293,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     void handleLoadJobs();
   }, [handleLoadJobs, hydrateFromCache, latestOnly, user?.id, user?.preferred_countries]);
 
-  const handleBatchTailor = async () => {
-    if (!user || !activeResume || selectedJobIds.length === 0) return;
-
-    try {
-      setShowTailorNotice(true);
-      setIsBatchRunning(true);
-      await applicationsApi.runBatch(selectedJobIds, activeResume.id, user.id);
-
-      // Once tailored, remove these jobs from the Jobs board immediately
-      const tailoredSet = new Set(selectedJobIds);
-      setSelectedJobIds([]);
-      setJobs((prev) => {
-        const next = prev.filter((j) => !tailoredSet.has(j.id));
-        setHasSessionSnapshot(true);
-        persistCache(next, discoveryStats, selectedCountries);
-        return next;
-      });
-    } catch {
-      // ignore
-    } finally {
-      setIsBatchRunning(false);
-    }
+  const handleBatchTailor = () => {
+    if (selectedJobIds.length === 0) return;
+    // Show maintenance notice popup without calling backend or removing jobs
+    setShowBatchUnavailableModal(true);
   };
 
   const handleCardClick = (job: Job) => {
@@ -349,6 +333,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   return (
     <section className="relative space-y-6 pb-20">
       <TailorNoticeModal open={showTailorNotice} onClose={() => setShowTailorNotice(false)} />
+      <BatchUnavailableModal
+        open={showBatchUnavailableModal}
+        onClose={() => setShowBatchUnavailableModal(false)}
+      />
       <div className="industrial-panel p-5 sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">
@@ -421,21 +409,23 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
             <span>
               Found <strong className="font-semibold text-primary-600">{discoveryStats.scraped}</strong> new opportunities.
             </span>
-            <span>
-              Go to{' '}
-              {onNavigateToJobs ? (
-                <button
-                  type="button"
-                  onClick={onNavigateToJobs}
-                  className="font-bold text-primary-600 underline underline-offset-4 decoration-2 decoration-primary-600 hover:text-accent-rose hover:decoration-accent-rose transition-colors cursor-pointer inline"
-                >
-                  Jobs
-                </button>
-              ) : (
-                <span className="font-bold text-primary-600 underline underline-offset-4 decoration-2">Jobs</span>
-              )}{' '}
-              to view jobs.
-            </span>
+            {hideJobList && (
+              <span>
+                Go to{' '}
+                {onNavigateToJobs ? (
+                  <button
+                    type="button"
+                    onClick={onNavigateToJobs}
+                    className="font-bold text-primary-600 underline underline-offset-4 decoration-2 decoration-primary-600 hover:text-accent-rose hover:decoration-accent-rose transition-colors cursor-pointer inline"
+                  >
+                    Jobs
+                  </button>
+                ) : (
+                  <span className="font-bold text-primary-600 underline underline-offset-4 decoration-2">Jobs</span>
+                )}{' '}
+                to view jobs.
+              </span>
+            )}
           </div>
         )}
       </div>

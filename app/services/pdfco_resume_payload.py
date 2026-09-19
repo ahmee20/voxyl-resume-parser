@@ -32,19 +32,20 @@ Rules:
 2. If a keyword or phrase appears in the gap analysis as removed_keywords, do not reintroduce it into the JSON payload from the base resume text.
 3. If the gap analysis includes added_keywords, prefer wording that matches the tailored resume and the targeted language already present in the tailored HTML. Do not revert to the original base resume wording when the tailored version intentionally changes it.
 4. If a field or section is missing from the tailored resume, fall back to the base resume text only for the missing details.
-5. Do not invent titles, dates, employers, degrees, skills, or certifications.
-6. If the profile block conflicts with the tailored resume or base text, the resume text wins. Do not invent the candidate's name, email, or links from account-holder data unless those details appear in the resume itself.
-7. Recognize these section aliases and map them to the canonical key instead of skipping them:
+5. PRESERVE ALL PROJECTS: You MUST include every single project present in the resume under `projects`. Do NOT remove, drop, omit, or merge any projects.
+6. Do not invent titles, dates, employers, degrees, skills, or certifications.
+7. If the profile block conflicts with the tailored resume or base text, the resume text wins. Do not invent the candidate's name, email, or links from account-holder data unless those details appear in the resume itself.
+8. Recognize these section aliases and map them to the canonical key instead of skipping them:
    - summary: professional summary, summary, profile, overview
    - skills: technical skills, skills, core competencies, competencies
    - experience: professional experience, work experience, industry experience, job experience, previous experience, employment history, career history
-   - projects: projects, key projects, selected projects, relevant projects
+   - projects: projects, key projects, selected projects, relevant projects, personal projects, academic projects
    - education: education, academic background, academics
    - certifications: certifications, certifications & achievements, achievements, honors, awards
-8. Prefer concise, clean values that look natural in a resume template.
-9. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
-10. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
-11. Do not emit empty strings, empty arrays, or extra keys.
+9. Prefer concise, clean values that look natural in a resume template.
+10. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
+11. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
+12. Do not emit empty strings, empty arrays, or extra keys.
 
 Schema:
 {

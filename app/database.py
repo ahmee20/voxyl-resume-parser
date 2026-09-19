@@ -6,10 +6,13 @@ Rules:
 - Never import the engine directly in route handlers — use the get_db dependency.
 - AsyncSession is injected via FastAPI's Depends(get_db).
 - PgBouncer / Supabase pooling compatibility: statement_cache_size=0, unique statement naming, and NullPool.
+- Force IPv4 resolution to prevent [Errno 99] in IPv4-only serverless runtimes (e.g., Vercel / AWS Lambda).
 """
 
+import socket
 import uuid
 from typing import AsyncGenerator
+from urllib.parse import urlparse
 
 import structlog
 from sqlalchemy.ext.asyncio import (
@@ -30,26 +33,59 @@ def _generate_unique_stmt_name() -> str:
     return f"__asyncpg_{uuid.uuid4().hex}__"
 
 
+def _resolve_ipv4_host(hostname: str, port: int) -> str:
+    """Resolve hostname strictly to IPv4 to prevent [Errno 99] in IPv4-only serverless environments."""
+    if not hostname or hostname in ("localhost", "127.0.0.1"):
+        return hostname
+    try:
+        # Check if already an IP
+        socket.inet_aton(hostname)
+        return hostname
+    except OSError:
+        pass
+
+    try:
+        addr_info = socket.getaddrinfo(
+            hostname,
+            port,
+            family=socket.AF_INET,
+            type=socket.SOCK_STREAM,
+        )
+        if addr_info and addr_info[0][4]:
+            ipv4 = addr_info[0][4][0]
+            log.info("resolved_ipv4_host", hostname=hostname, ipv4=ipv4)
+            return ipv4
+    except Exception as exc:
+        log.warning("ipv4_dns_resolution_failed", hostname=hostname, error=str(exc))
+    return hostname
+
+
 # ── Engine ────────────────────────────────────────────────────────────────────
-# Disable client-side pooling & prepared statement caching for Supabase / PgBouncer
 database_url = settings.resolved_database_url
-if database_url == settings.database_url and "db." in database_url and "supabase.co" in database_url:
-    log.warning(
-        "direct_supabase_host_detected",
-        note="Set SUPABASE_POOLER_URL in Render to use the pooler host.",
-    )
 engine_kwargs = {"echo": False}
+
 if "postgresql" in database_url or "asyncpg" in database_url:
+    parsed = urlparse(database_url)
+    orig_host = parsed.hostname or ""
+    port = parsed.port or 5432
+    ipv4_host = _resolve_ipv4_host(orig_host, port) if orig_host else ""
+
+    connect_args: dict = {
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+        "prepared_statement_name_func": _generate_unique_stmt_name,
+        "server_settings": {
+            "jit": "off",
+        },
+    }
+
+    if ipv4_host and ipv4_host != orig_host:
+        connect_args["host"] = ipv4_host
+        connect_args["server_hostname"] = orig_host
+
     engine_kwargs.update({
         "poolclass": NullPool,
-        "connect_args": {
-            "statement_cache_size": 0,
-            "prepared_statement_cache_size": 0,
-            "prepared_statement_name_func": _generate_unique_stmt_name,
-            "server_settings": {
-                "jit": "off",
-            },
-        },
+        "connect_args": connect_args,
     })
 else:
     engine_kwargs.update({"pool_pre_ping": True})

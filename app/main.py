@@ -85,60 +85,52 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
             database_url = settings.resolved_database_url
             if "postgresql" in database_url or "asyncpg" in database_url:
-                # Ensure enums exist
-                await conn.execute(text("DO $$ BEGIN CREATE TYPE applied_status_enum AS ENUM ('no', 'yes', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;"))
-                await conn.execute(text("DO $$ BEGIN CREATE TYPE application_mode_enum AS ENUM ('auto', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;"))
-                await conn.execute(text("DO $$ BEGIN CREATE TYPE application_status_enum AS ENUM ('discovered', 'tailoring', 'pending_approval', 'approved', 'sent', 'saved', 'failed'); EXCEPTION WHEN duplicate_object THEN null; END $$;"))
-                
-                # Ensure applications columns exist
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS resume_id INTEGER REFERENCES resumes(id) ON DELETE SET NULL;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS applied_status applied_status_enum DEFAULT 'no';"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS mode application_mode_enum DEFAULT 'manual';"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS status application_status_enum DEFAULT 'discovered';"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS tailored_html TEXT;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS rendered_pdf_url TEXT;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS ats_score INTEGER;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS gap_analysis TEXT;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS drive_folder_url TEXT;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS email_draft TEXT;"))
-                await conn.execute(text("ALTER TABLE applications ADD COLUMN IF NOT EXISTS approval_attempts INTEGER DEFAULT 0;"))
-
-                # Ensure user profile columns exist for resume/email personalization
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_name VARCHAR(255);"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_roles JSONB DEFAULT '[]'::jsonb;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_countries JSONB DEFAULT '[]'::jsonb;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url TEXT;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS portfolio_url TEXT;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url TEXT;"))
-                await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;"))
-                await conn.execute(text("UPDATE users SET preferred_roles = COALESCE(preferred_roles, '[]'::jsonb);"))
-                await conn.execute(text("UPDATE users SET preferred_countries = COALESCE(preferred_countries, '[]'::jsonb);"))
-                await conn.execute(text("UPDATE users SET profile_completed = FALSE WHERE profile_completed IS NULL;"))
-                await conn.execute(text("ALTER TABLE users ALTER COLUMN profile_completed SET NOT NULL;"))
-
-                # Persist the original resume filename so it can be reused by the UI.
-                await conn.execute(text("ALTER TABLE resumes ADD COLUMN IF NOT EXISTS filename VARCHAR(255);"))
-                await conn.execute(text("UPDATE resumes SET filename = COALESCE(filename, 'resume-v' || version::text || '.pdf') WHERE filename IS NULL;"))
-
-                # Add targeted indexes for the most common fetch patterns.
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_resumes_user_is_base_version ON resumes (user_id, is_base, version DESC);"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_jobs_user_id_desc ON jobs (user_id, id DESC);"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_applications_user_id_desc ON applications (user_id, id DESC);"))
-                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_runs_application_id_desc ON agent_runs (application_id, id DESC);"))
-                
-                # Ensure jobs columns exist
-                await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_qualified BOOLEAN DEFAULT TRUE;"))
-                await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_score INTEGER;"))
-                await conn.execute(text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filter_reason TEXT;"))
+                await conn.execute(text("""
+                    DO $$ BEGIN CREATE TYPE applied_status_enum AS ENUM ('no', 'yes', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+                    DO $$ BEGIN CREATE TYPE application_mode_enum AS ENUM ('auto', 'manual'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+                    DO $$ BEGIN CREATE TYPE application_status_enum AS ENUM ('discovered', 'tailoring', 'pending_approval', 'approved', 'sent', 'saved', 'failed'); EXCEPTION WHEN duplicate_object THEN null; END $$;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS resume_id INTEGER REFERENCES resumes(id) ON DELETE SET NULL;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS applied_status applied_status_enum DEFAULT 'no';
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS mode application_mode_enum DEFAULT 'manual';
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS status application_status_enum DEFAULT 'discovered';
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS tailored_html TEXT;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS rendered_pdf_url TEXT;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS ats_score INTEGER;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS gap_analysis TEXT;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS drive_folder_url TEXT;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS email_draft TEXT;
+                    ALTER TABLE applications ADD COLUMN IF NOT EXISTS approval_attempts INTEGER DEFAULT 0;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_name VARCHAR(255);
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_roles JSONB DEFAULT '[]'::jsonb;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_countries JSONB DEFAULT '[]'::jsonb;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS github_url TEXT;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS portfolio_url TEXT;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS linkedin_url TEXT;
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
+                    UPDATE users SET preferred_roles = COALESCE(preferred_roles, '[]'::jsonb);
+                    UPDATE users SET preferred_countries = COALESCE(preferred_countries, '[]'::jsonb);
+                    UPDATE users SET profile_completed = FALSE WHERE profile_completed IS NULL;
+                    ALTER TABLE users ALTER COLUMN profile_completed SET NOT NULL;
+                    ALTER TABLE resumes ADD COLUMN IF NOT EXISTS filename VARCHAR(255);
+                    UPDATE resumes SET filename = COALESCE(filename, 'resume-v' || version::text || '.pdf') WHERE filename IS NULL;
+                    CREATE INDEX IF NOT EXISTS ix_resumes_user_is_base_version ON resumes (user_id, is_base, version DESC);
+                    CREATE INDEX IF NOT EXISTS ix_jobs_user_id_desc ON jobs (user_id, id DESC);
+                    CREATE INDEX IF NOT EXISTS ix_applications_user_id_desc ON applications (user_id, id DESC);
+                    CREATE INDEX IF NOT EXISTS ix_agent_runs_application_id_desc ON agent_runs (application_id, id DESC);
+                    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_qualified BOOLEAN DEFAULT TRUE;
+                    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_score INTEGER;
+                    ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filter_reason TEXT;
+                """))
         log.info("database_connected_and_tables_ready", url=settings.resolved_database_url.split("@")[-1])
     except Exception as exc:
         log.error("database_connection_failed", error=str(exc))
         # Don't crash startup — the health check will surface the error.
 
-    # Start the background discovery scheduler
-    if settings.scheduler_enabled:
+    is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    # Start the background discovery scheduler only in non-serverless long-running processes
+    if settings.scheduler_enabled and not is_serverless:
         start_scheduler()
 
     log.info("app_ready", host="0.0.0.0", port=8000)
@@ -146,7 +138,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
-    stop_scheduler()
+    if settings.scheduler_enabled and not is_serverless:
+        stop_scheduler()
     await engine.dispose()
     log.info("shutdown")
 

@@ -13,66 +13,71 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const USER_CACHE_KEY = 'voxyl.auth.user';
+const SESSION_FLAG_KEY = 'voxyl.auth.has_session';
 
-const clearVoxylSessionCache = () => {
-  const keysToRemove: string[] = [];
+const clearVoxylCache = () => {
+  localStorage.removeItem(USER_CACHE_KEY);
+  localStorage.removeItem(SESSION_FLAG_KEY);
+  sessionStorage.removeItem(USER_CACHE_KEY);
+
+  const sessionKeys: string[] = [];
   for (let i = 0; i < sessionStorage.length; i += 1) {
     const key = sessionStorage.key(i);
     if (key && key.startsWith('voxyl.')) {
-      keysToRemove.push(key);
+      sessionKeys.push(key);
     }
   }
-  keysToRemove.forEach((key) => sessionStorage.removeItem(key));
+  sessionKeys.forEach((key) => sessionStorage.removeItem(key));
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // 1. Immediately read cached user from localStorage (0ms synchronous restore)
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const cached = localStorage.getItem(USER_CACHE_KEY) || sessionStorage.getItem(USER_CACHE_KEY);
+      return cached ? (JSON.parse(cached) as User) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // 2. Only show full loading spinner if user has an active session flag AND user is not yet in cache.
+  // New visitors / logged-out users see the Google login page INSTANTLY with 0ms delay.
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      const hasCachedUser = !!(localStorage.getItem(USER_CACHE_KEY) || sessionStorage.getItem(USER_CACHE_KEY));
+      if (hasCachedUser) {
+        return false;
+      }
+      const hasSession = localStorage.getItem(SESSION_FLAG_KEY) === 'true';
+      return hasSession;
+    } catch {
+      return false;
+    }
+  });
 
   const checkAuth = async () => {
-    const cachedUser = sessionStorage.getItem(USER_CACHE_KEY);
-    if (cachedUser) {
-      try {
-        const parsedUser = JSON.parse(cachedUser) as User;
-        setUser(parsedUser);
-        setIsLoading(false);
-
-        void authApi
-          .getMe()
-          .then((currentUser) => {
-            setUser(currentUser);
-            sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(currentUser));
-          })
-          .catch(() => {
-            setUser(null);
-            sessionStorage.removeItem(USER_CACHE_KEY);
-            clearVoxylSessionCache();
-          });
-
-        return;
-      } catch {
-        sessionStorage.removeItem(USER_CACHE_KEY);
-      }
-    }
-
     try {
       const currentUser = await authApi.getMe();
       setUser(currentUser);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(currentUser));
+      localStorage.setItem(SESSION_FLAG_KEY, 'true');
       sessionStorage.setItem(USER_CACHE_KEY, JSON.stringify(currentUser));
     } catch {
       setUser(null);
-      sessionStorage.removeItem(USER_CACHE_KEY);
-      clearVoxylSessionCache();
+      clearVoxylCache();
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    checkAuth();
+    // Run silent auth check in background without blocking landing view
+    void checkAuth();
   }, []);
 
   const loginWithGoogle = () => {
+    localStorage.setItem(SESSION_FLAG_KEY, 'true');
     window.location.href = authApi.getLoginUrl();
   };
 
@@ -83,7 +88,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // ignore
     } finally {
       setUser(null);
-      clearVoxylSessionCache();
+      clearVoxylCache();
+      setIsLoading(false);
     }
   };
 

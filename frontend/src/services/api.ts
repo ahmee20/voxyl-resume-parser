@@ -13,7 +13,7 @@ export const apiClient = axios.create({
 
 export const authApi = {
   getMe: async (): Promise<User> => {
-    const response = await apiClient.get<User>('/auth/me');
+    const response = await apiClient.get<User>('/auth/me', { timeout: 4000 });
     return response.data;
   },
   getLoginUrl: (): string => {

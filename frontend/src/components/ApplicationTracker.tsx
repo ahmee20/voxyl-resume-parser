@@ -135,13 +135,11 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[34px] px-2 py-2">
+      <div className="industrial-panel p-5 sm:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-accent-emerald">
-              Tailored jobs
-            </p>
-            <h2 className="hero-type text-2xl font-semibold text-primary-600">Jobs with tailored resumes</h2>
+            <p className="section-index">04 / APPLICATION ARCHIVE</p>
+            <h2 className="hero-type text-3xl font-bold text-primary-600">Tailored applications</h2>
             <p className="max-w-2xl text-sm leading-7 text-slate-500">
               These are the jobs where Voxyl has already prepared a tailored resume and outreach assets for you.
             </p>
@@ -154,18 +152,18 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search tailored jobs"
-                className="w-56 rounded-full border border-border bg-white/90 py-2.5 pl-9 pr-4 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+                className="w-56 border border-primary-600 bg-surface py-2.5 pl-9 pr-4 text-sm text-primary-600 outline-none focus:border-accent-rose"
               />
             </div>
             <button
               type="button"
               onClick={() => void loadTailoredJobs(true, false)}
               disabled={isLoading}
-              className="rounded-full border border-border bg-white/90 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+              className="border border-primary-600 bg-surface px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
             >
               Load jobs
             </button>
-            <span className="rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs font-mono text-slate-500">
+            <span className="border border-primary-600 bg-surface px-3 py-1.5 text-xs font-mono text-slate-500">
               {displayedJobs.length} ready
             </span>
           </div>
@@ -194,15 +192,15 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
               description.length > 180 ? `${description.slice(0, 180).trim()}...` : description || 'No description available.';
 
             return (
-              <article key={job.id} className="rounded-[28px] bg-white/70 p-5">
+              <article key={job.id} className="border border-border bg-surface p-5 shadow-[3px_3px_0_rgba(29,28,26,0.08)] transition hover:-translate-y-0.5 hover:border-primary-600">
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                        <span className="border border-emerald-700 bg-emerald-50 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase text-emerald-700">
                         Tailored
                       </span>
                       {app?.ats_score != null ? (
-                        <span className="rounded-full border border-border bg-white/90 px-2.5 py-1 text-[10px] font-mono text-slate-500">
+                        <span className="border border-border bg-background px-2.5 py-1 text-[10px] font-mono text-slate-500">
                           ATS {app.ats_score}%
                         </span>
                       ) : null}
@@ -227,12 +225,12 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                 <p className="mt-4 text-sm leading-7 text-slate-600">{snippet}</p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs text-slate-600">
+                  <div className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5 text-xs text-slate-600">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                     Resume ready
                   </div>
                   {app?.email_draft ? (
-                    <div className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs text-slate-600">
+                    <div className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5 text-xs text-slate-600">
                       <FileText className="h-3.5 w-3.5 text-accent-emerald" />
                       Email drafted
                     </div>
@@ -246,7 +244,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                   {app ? (
                     <button
                       onClick={() => onSelectApplication(app.id)}
-                      className="inline-flex items-center gap-2 rounded-full bg-accent-rose px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#e36457]"
+                      className="inline-flex items-center gap-2 border border-primary-600 bg-accent-rose px-4 py-2 text-xs font-bold text-white shadow-[2px_2px_0_#1D1C1A] hover:-translate-y-0.5"
                     >
                       Open assets
                       <ChevronRight className="h-4 w-4" />

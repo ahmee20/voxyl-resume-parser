@@ -74,16 +74,17 @@ export const ResumeUpload: React.FC<ResumeUploadProps> = ({ onUploadSuccess }) =
   };
 
   return (
-    <div className="rounded-[32px] px-6 py-6">
+    <section className="industrial-panel module-enter min-h-full p-6 sm:p-7">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h2 className="hero-type text-base font-semibold text-primary-600">Resume upload</h2>
+          <p className="section-index mb-2">02 / SOURCE DOCUMENT</p>
+          <h2 className="hero-type text-xl font-bold text-primary-600">Resume control</h2>
           <p className="text-xs text-slate-500">
             Add a PDF or DOCX. Voxyl keeps it private and brings it back the next time you sign in.
           </p>
         </div>
         {savedResume && (
-          <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700">
+          <div className="flex items-center gap-1.5 border border-emerald-700 bg-emerald-50 px-2.5 py-1 font-mono text-[10px] uppercase text-emerald-700">
             <FileCheck className="w-3.5 h-3.5" />
             <span>Saved</span>
           </div>
@@ -91,7 +92,7 @@ export const ResumeUpload: React.FC<ResumeUploadProps> = ({ onUploadSuccess }) =
       </div>
 
       {savedResume && !showUploader ? (
-        <div className="rounded-[26px] bg-white/55 p-5">
+        <div className="border border-primary-600 bg-background p-5">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
@@ -108,7 +109,7 @@ export const ResumeUpload: React.FC<ResumeUploadProps> = ({ onUploadSuccess }) =
             <button
               type="button"
               onClick={() => setShowUploader(true)}
-              className="rounded-full bg-white/75 px-4 py-2 text-xs font-medium text-slate-600 transition hover:bg-white hover:text-primary-600"
+              className="border border-primary-600 bg-surface px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white"
             >
               Use another resume
             </button>
@@ -120,10 +121,10 @@ export const ResumeUpload: React.FC<ResumeUploadProps> = ({ onUploadSuccess }) =
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center rounded-[28px] border-2 border-dashed p-8 cursor-pointer transition-all ${
+          className={`relative flex min-h-[210px] cursor-pointer flex-col items-center justify-center border border-dashed p-8 ${
             isDragging
               ? 'border-primary-400 bg-primary-50'
-              : 'border-white/50 bg-white/55 hover:border-primary-200 hover:bg-white/70'
+              : 'border-primary-400 bg-background hover:border-accent-rose hover:bg-surface'
           }`}
         >
           <input
@@ -148,7 +149,7 @@ export const ResumeUpload: React.FC<ResumeUploadProps> = ({ onUploadSuccess }) =
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary-100 bg-primary-50 text-primary-500">
+              <div className="flex h-11 w-11 items-center justify-center border border-primary-600 bg-accent-rose text-white shadow-[3px_3px_0_#1D1C1A]">
                 <UploadCloud className="w-5 h-5" />
               </div>
               <div className="text-center">
@@ -168,6 +169,6 @@ export const ResumeUpload: React.FC<ResumeUploadProps> = ({ onUploadSuccess }) =
           <span>{error}</span>
         </div>
       )}
-    </div>
+    </section>
   );
 };

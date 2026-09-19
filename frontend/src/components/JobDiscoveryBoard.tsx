@@ -326,29 +326,25 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     AVAILABLE_COUNTRIES.find((item) => item.code === code)?.name || code || 'Country not specified';
 
   return (
-    <div className="relative space-y-6 pb-20">
+    <section className="relative space-y-6 pb-20">
       <TailorNoticeModal open={showTailorNotice} onClose={() => setShowTailorNotice(false)} />
-      <div className="rounded-[34px] px-4 py-4 sm:px-7 sm:py-5">
+      <div className="industrial-panel p-5 sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-white/60 px-3 py-1 text-xs text-slate-500">
-                Saved preferences
-              </span>
-            </div>
+            <div><p className="section-index mb-2">03 / DISCOVERY PARAMETERS</p><h2 className="hero-type text-2xl font-bold text-primary-600">Opportunity radar</h2></div>
 
             <div className="flex flex-wrap gap-2">
               {preferredRoles.length > 0 ? (
                 preferredRoles.map((role) => (
                   <span
                     key={role}
-                    className="inline-flex items-center rounded-full bg-white/70 px-3 py-1 text-xs font-medium text-primary-600"
+                    className="inline-flex items-center border border-primary-600 bg-surface px-3 py-1 text-xs font-semibold text-primary-600"
                   >
                     {role}
                   </span>
                 ))
               ) : (
-                <span className="rounded-full bg-white/70 px-3 py-1 text-xs text-slate-500">
+                <span className="border border-border bg-background px-3 py-1 text-xs text-slate-500">
                   Add preferred roles in Profile
                 </span>
               )}
@@ -358,7 +354,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
               {selectedCountries.map((country) => (
                 <div
                   key={country}
-                  className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-2 text-xs text-slate-600"
+                  className="inline-flex items-center gap-2 border border-border bg-background px-3 py-2 text-xs text-slate-600"
                 >
                   <span>{currentCountryLabel(country)}</span>
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -372,7 +368,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
               <button
                 onClick={handleLoadJobs}
                 disabled={isLoading}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-white/70 px-4 py-2.5 text-xs font-medium text-slate-600 transition hover:bg-white/90 hover:text-primary-600 disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-2 border border-primary-600 bg-surface px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white disabled:opacity-50"
                 title="Load job listings"
               >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -382,7 +378,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
             <button
               onClick={handleDiscover}
               disabled={!activeResume || isDiscovering}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent-rose px-4 py-3 text-xs font-semibold text-white transition hover:bg-[#e36457] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 border border-primary-600 bg-accent-rose px-5 py-3 text-xs font-bold text-white shadow-[3px_3px_0_#1D1C1A] hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isDiscovering ? (
                 <>
@@ -412,7 +408,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
             <Briefcase className="w-4 h-4 text-primary-500" />
             <span>Discovered opportunities</span>
-            <span className="rounded-full border border-border bg-white/90 px-2 py-0.5 font-mono text-xs text-slate-500">
+            <span className="border border-border bg-surface px-2 py-0.5 font-mono text-xs text-slate-500">
               {jobs.length} Available
             </span>
           </h3>
@@ -425,14 +421,14 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={selectAllUntailored}
-              className="rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs text-slate-600 transition-colors hover:border-primary-200 hover:text-primary-600"
+              className="border border-primary-600 bg-surface px-3 py-1.5 text-xs text-slate-600 transition-colors hover:bg-primary-600 hover:text-white"
             >
               Select All
             </button>
             {selectedJobIds.length > 0 && (
               <button
                 onClick={clearSelection}
-                className="rounded-full px-2.5 py-1.5 text-xs text-slate-500 hover:text-primary-600"
+                className="border border-transparent px-2.5 py-1.5 text-xs text-slate-500 hover:border-border hover:text-primary-600"
               >
                 Clear
               </button>
@@ -457,7 +453,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         </div>
       ) : (
         /* Jobs Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {jobs.map((job) => {
             const isProcessing = runningJobId === job.id;
             const apollo = job.apollo_enrichment;
@@ -467,10 +463,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
               <div
                 key={job.id}
                 onClick={() => handleCardClick(job)}
-                className={`rounded-[28px] bg-white/70 p-5 transition-colors flex flex-col justify-between space-y-4 cursor-pointer group relative ${
+                className={`group relative flex cursor-pointer flex-col justify-between space-y-4 border border-border bg-surface p-5 shadow-[3px_3px_0_rgba(29,28,26,0.08)] ${
                   isSelected
                     ? 'ring-1 ring-primary-200'
-                    : 'hover:bg-white/80'
+                    : 'hover:-translate-y-0.5 hover:border-primary-600 hover:shadow-[5px_5px_0_rgba(29,28,26,0.12)]'
                 }`}
               >
                 {/* Top Status & Checkbox */}
@@ -493,12 +489,12 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-border text-slate-500">
+                      <span className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase text-slate-500">
                             Untailored
                           </span>
 
                           {job.match_score && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border border-border text-slate-600 font-mono">
+                            <span className="border border-primary-600 px-2 py-0.5 font-mono text-[10px] font-medium text-primary-600">
                               {job.match_score}% Match
                             </span>
                           )}
@@ -577,7 +573,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
                     <button
                       onClick={(e) => handleSingleJobTailor(job, e)}
                       disabled={!activeResume || isProcessing}
-                      className="flex items-center gap-1.5 rounded-full border border-border bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-primary-200 hover:text-primary-600"
+                      className="flex items-center gap-1.5 border border-primary-600 bg-surface px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white"
                     >
                       {isProcessing ? (
                         <>
@@ -600,10 +596,10 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
       {/* Floating Multi-Select Action Bar */}
       {selectedJobIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-4 rounded-full bg-white/90 px-5 py-3 backdrop-blur-xl shadow-lg border border-border max-w-[90vw] overflow-x-auto">
+        <div className="fixed bottom-6 left-1/2 z-40 flex max-w-[90vw] -translate-x-1/2 items-center gap-4 overflow-x-auto border border-primary-600 bg-primary-600 px-5 py-3 text-white shadow-[5px_5px_0_#D55335]">
           <div className="flex items-center gap-2 shrink-0">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-semibold text-primary-600">
+            <span className="flex h-2 w-2 bg-accent-emerald animate-pulse" />
+            <span className="text-xs font-semibold text-white">
               {selectedJobIds.length} Job{selectedJobIds.length > 1 ? 's' : ''} Selected
             </span>
           </div>
@@ -613,7 +609,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           <button
             onClick={handleBatchTailor}
             disabled={!activeResume || isBatchRunning}
-            className="flex items-center gap-2 rounded-full bg-accent-emerald px-5 py-2 text-xs font-bold text-white transition-colors hover:bg-[#18b486] disabled:opacity-50 shrink-0"
+            className="flex shrink-0 items-center gap-2 border border-white bg-accent-emerald px-5 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
           >
             {isBatchRunning ? (
               <>
@@ -629,7 +625,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
           <button
             onClick={clearSelection}
-            className="text-xs text-slate-400 hover:text-slate-600 shrink-0"
+            className="shrink-0 text-xs text-white/70 hover:text-white"
           >
             Cancel
           </button>
@@ -658,6 +654,6 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           }}
         />
       )}
-    </div>
+    </section>
   );
 };

@@ -60,40 +60,41 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07110d]/30 p-4 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-600/60 p-4 backdrop-blur-sm">
       <TailorNoticeModal open={showTailorNotice} onClose={() => setShowTailorNotice(false)} />
       <div
-        className="panel-air flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[32px]"
+        className="panel-air flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between border-b border-border px-6 py-5">
           <div className="space-y-2 pr-6">
             <div className="flex flex-wrap items-center gap-2">
               {isTailored ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                <span className="inline-flex items-center gap-1 border border-emerald-700 bg-emerald-50 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-emerald-700">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Tailored and ready
                 </span>
               ) : isTailoring ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                <span className="inline-flex items-center gap-1 border border-amber-700 bg-amber-50 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-amber-700">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Tailoring in progress
                 </span>
               ) : (
-                <span className="rounded-full border border-border bg-surface/60 px-2.5 py-1 text-xs font-medium text-slate-500">
+                <span className="border border-border bg-surface/60 px-2.5 py-1 font-mono text-xs font-medium uppercase text-slate-500">
                   Discovered
                 </span>
               )}
 
               {job.match_score && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-semibold text-primary-600">
+                <span className="inline-flex items-center gap-1 border border-primary-600 bg-primary-50 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-primary-600">
                   <Percent className="h-3.5 w-3.5" />
                   {job.match_score}% Match
                 </span>
               )}
             </div>
 
-            <h2 className="hero-type text-xl font-semibold tracking-tight text-primary-600">{job.title}</h2>
+            <p className="section-index">JOB FILE / {job.id}</p>
+            <h2 className="hero-type text-2xl font-bold text-primary-600">{job.title}</h2>
 
             <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
               <span className="flex items-center gap-1">
@@ -121,7 +122,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
 
           <button
             onClick={onClose}
-            className="rounded-full border border-border bg-white p-2 text-slate-500 transition hover:border-primary-200 hover:text-primary-600"
+            className="border border-primary-600 bg-surface p-2 text-slate-500 transition hover:bg-primary-600 hover:text-white"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -200,7 +201,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
         <div className="flex items-center justify-between border-t border-border px-6 py-4">
           <button
             onClick={onClose}
-            className="rounded-full border border-border bg-white/90 px-4 py-2 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+            className="border border-primary-600 bg-surface px-4 py-2 text-xs font-medium text-slate-600 transition hover:bg-primary-600 hover:text-white"
           >
             Close
           </button>
@@ -212,7 +213,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
                   onClose();
                   onViewTailored(app.id);
                 }}
-                className="inline-flex items-center gap-2 rounded-full bg-accent-rose px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[#e36457]"
+                className="inline-flex items-center gap-2 border border-primary-600 bg-accent-rose px-5 py-2.5 text-xs font-semibold text-white shadow-[2px_2px_0_#1D1C1A] transition hover:-translate-y-0.5"
               >
                 <FileText className="h-4 w-4" />
                 View resume and letter
@@ -220,7 +221,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
             ) : isTailoring ? (
               <button
                 disabled
-                className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-5 py-2.5 text-xs font-semibold text-amber-700"
+                className="inline-flex items-center gap-2 border border-amber-700 bg-amber-50 px-5 py-2.5 text-xs font-semibold text-amber-700"
               >
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Tailoring in progress
@@ -229,7 +230,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
               <button
                 onClick={handleStartTailoring}
                 disabled={!activeResume || !user || isStarting}
-                className="inline-flex items-center gap-2 rounded-full bg-primary-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[#20352e] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-2 border border-primary-600 bg-primary-600 px-5 py-2.5 text-xs font-semibold text-white shadow-[2px_2px_0_#D55335] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isStarting ? (
                   <>

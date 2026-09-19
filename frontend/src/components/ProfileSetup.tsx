@@ -116,10 +116,11 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
 
   return (
     <main className="flex-1 px-4 py-8 sm:py-10">
-      <section className="panel-air mx-auto w-full max-w-2xl rounded-[34px] p-6 sm:p-8">
+      <section className="panel-air mx-auto w-full max-w-3xl p-6 sm:p-9">
         <div className="space-y-6">
           <div className="space-y-2">
-            <h1 className="hero-type text-3xl font-semibold text-primary-600 sm:text-4xl">Profile details</h1>
+            <p className="section-index">05 / CANDIDATE PARAMETERS</p>
+            <h1 className="hero-type text-3xl font-bold text-primary-600 sm:text-4xl">Profile details</h1>
             <p className="max-w-xl text-sm leading-7 text-slate-500">
               Save the details you want Voxyl to remember, then update them anytime from this page.
             </p>
@@ -133,7 +134,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
               value={preferredName}
               onChange={(event) => setPreferredName(event.target.value)}
               placeholder={user?.name || 'Your name'}
-              className="w-full rounded-full border border-border bg-white/90 px-5 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+              className="w-full border border-primary-600 bg-surface px-5 py-3 text-sm text-primary-600 outline-none focus:border-accent-rose"
             />
           </label>
 
@@ -149,7 +150,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
               <button
                 type="button"
                 onClick={() => setSendMode('manual')}
-                className={`rounded-[24px] border px-4 py-3 text-left transition ${
+                className={`border px-4 py-3 text-left ${
                   sendMode === 'manual'
                     ? 'border-primary-200 bg-white text-primary-600'
                     : 'border-border bg-white/80 text-slate-600 hover:border-primary-200'
@@ -167,7 +168,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
               <button
                 type="button"
                 onClick={() => setSendMode('auto')}
-                className={`rounded-[24px] border px-4 py-3 text-left transition ${
+                className={`border px-4 py-3 text-left ${
                   sendMode === 'auto'
                     ? 'border-primary-200 bg-white text-primary-600'
                     : 'border-border bg-white/80 text-slate-600 hover:border-primary-200'
@@ -196,7 +197,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
                 value={roles[0] || ''}
                 onChange={(event) => updateRole(event.target.value)}
                 placeholder="AI Engineer"
-                className="w-full rounded-full border border-border bg-white/90 px-5 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+                className="w-full border border-primary-600 bg-surface px-5 py-3 text-sm text-primary-600 outline-none focus:border-accent-rose"
               />
             </div>
           </div>
@@ -212,7 +213,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
               {previewCountries.map((country) => (
                 <span
                   key={country}
-                  className="inline-flex min-w-fit items-center gap-2 rounded-full border border-border bg-white/90 px-4 py-2 text-xs text-slate-600"
+                  className="inline-flex min-w-fit items-center gap-2 border border-border bg-surface px-4 py-2 font-mono text-xs text-slate-600"
                 >
                   <span>{AVAILABLE_COUNTRIES.find((item) => item.code === country)?.name || country}</span>
                   <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -225,10 +226,10 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
                 value={countryQuery}
                 onChange={(event) => setCountryQuery(event.target.value)}
                 placeholder="Search countries"
-                className="w-full rounded-full border border-border bg-white/90 py-3 pl-9 pr-4 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+                className="w-full border border-primary-600 bg-surface py-3 pl-9 pr-4 text-sm text-primary-600 outline-none transition focus:border-accent-rose"
               />
             </div>
-            <div className="max-h-52 space-y-2 overflow-y-auto rounded-[28px] border border-border bg-white/70 p-3 soft-scrollbar">
+            <div className="max-h-52 space-y-2 overflow-y-auto border border-border bg-background p-3 soft-scrollbar">
               {filteredCountries.map((country) => {
                 const isSelected = selectedCountries.includes(country.code);
                 return (
@@ -236,7 +237,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
                     key={country.code}
                     type="button"
                     onClick={() => toggleCountry(country.code)}
-                    className={`flex w-full items-center justify-between rounded-full border px-3 py-2.5 text-left text-sm transition ${
+                    className={`flex w-full items-center justify-between border px-3 py-2.5 text-left text-sm transition ${
                       isSelected
                         ? 'border-primary-200 bg-white text-primary-600'
                         : 'border-transparent bg-transparent text-slate-600 hover:border-border hover:bg-white/90'
@@ -261,7 +262,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
                     value={githubUrl}
                     onChange={(event) => setGithubUrl(event.target.value)}
                     placeholder="https://github.com/username"
-                    className="w-full rounded-full border border-border bg-white/90 px-4 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+                    className="w-full border border-primary-600 bg-surface px-4 py-3 text-sm text-primary-600 outline-none transition focus:border-accent-rose"
                   />
                 </label>
 
@@ -273,7 +274,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
                     value={portfolioUrl}
                     onChange={(event) => setPortfolioUrl(event.target.value)}
                     placeholder="https://your-portfolio.com"
-                    className="w-full rounded-full border border-border bg-white/90 px-4 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+                    className="w-full border border-primary-600 bg-surface px-4 py-3 text-sm text-primary-600 outline-none transition focus:border-accent-rose"
                   />
                 </label>
 
@@ -285,7 +286,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
                     value={linkedinUrl}
                     onChange={(event) => setLinkedinUrl(event.target.value)}
                     placeholder="https://linkedin.com/in/username"
-                    className="w-full rounded-full border border-border bg-white/90 px-4 py-3 text-sm text-primary-600 outline-none transition focus:border-primary-400"
+                    className="w-full border border-primary-600 bg-surface px-4 py-3 text-sm text-primary-600 outline-none transition focus:border-accent-rose"
                   />
                 </label>
               </div>
@@ -293,7 +294,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
           )}
 
           {error && (
-            <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-700">
+            <div className="border-l-2 border-accent-rose bg-surface-raised p-4 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -303,7 +304,7 @@ export const ProfileSetup: React.FC<ProfileSetupProps> = ({ mode = 'onboarding' 
               type="button"
               onClick={saveProfile}
               disabled={isSaving || !canSave}
-              className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#20352e] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center border border-primary-600 bg-accent-rose px-5 py-3 text-sm font-bold text-white shadow-[3px_3px_0_#1D1C1A] hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? 'Saving...' : mode === 'onboarding' ? 'Save and continue' : 'Save changes'}
             </button>

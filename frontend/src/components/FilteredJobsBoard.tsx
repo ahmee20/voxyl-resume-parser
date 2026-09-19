@@ -34,15 +34,16 @@ export const FilteredJobsBoard: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 backdrop-blur-xl">
+      <div className="industrial-panel flex flex-col justify-between gap-5 p-5 sm:flex-row sm:items-center sm:p-7">
         <div>
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold text-white tracking-tight">Filtered opportunities</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+          <p className="section-index mb-2">06 / FILTER LOG</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="hero-type text-2xl font-bold text-primary-600">Below-threshold roles</h2>
+            <span className="border border-accent-rose bg-surface-raised px-2.5 py-1 font-mono text-[10px] font-semibold uppercase text-accent-rose">
               {filteredJobs.length} Unmatched (&lt;70%)
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-500">
             Jobs that did not meet the match threshold or experience tolerance. Saved here for full transparency.
           </p>
         </div>
@@ -53,12 +54,12 @@ export const FilteredJobsBoard: React.FC = () => {
             placeholder="Search filtered jobs..."
             value={searchFilter}
             onChange={(e) => setSearchFilter(e.target.value)}
-            className="px-3.5 py-1.5 bg-slate-800/80 border border-slate-700/60 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30 w-48 sm:w-64"
+            className="w-48 border border-primary-600 bg-surface px-3.5 py-2 text-sm text-primary-600 outline-none placeholder:text-slate-400 focus:border-accent-rose sm:w-64"
           />
           <button
             onClick={loadFilteredJobs}
             disabled={loading}
-            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 rounded-xl transition"
+            className="border border-primary-600 bg-surface px-3.5 py-2 text-xs font-semibold text-primary-600 transition hover:bg-primary-600 hover:text-white disabled:opacity-50"
           >
             {loading ? 'Refreshing...' : 'Refresh'}
           </button>
@@ -67,14 +68,14 @@ export const FilteredJobsBoard: React.FC = () => {
 
       {loading && filteredJobs.length === 0 ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-7 h-7 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
+          <div className="h-7 w-7 animate-spin rounded-full border-2 border-border border-t-accent-rose" />
         </div>
       ) : displayedJobs.length === 0 ? (
-        <div className="text-center py-16 px-4 bg-slate-900/30 border border-slate-800/50 rounded-2xl">
-          <div className="w-12 h-12 rounded-2xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-center mx-auto mb-3 text-slate-400 font-mono text-sm">
+        <div className="border border-border bg-surface py-16 px-4 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center border border-primary-600 bg-background font-mono text-sm text-slate-500">
             0
           </div>
-          <h3 className="text-base font-medium text-slate-200">No filtered jobs found</h3>
+          <h3 className="text-base font-semibold text-primary-600">No filtered jobs found</h3>
           <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
             When the app evaluates scraped listings against your background, any roles that fall below the match threshold will appear here.
           </p>
@@ -86,35 +87,35 @@ export const FilteredJobsBoard: React.FC = () => {
             return (
               <div
                 key={job.id}
-                className="bg-slate-900/50 hover:bg-slate-900/70 border border-slate-800/80 hover:border-slate-700/80 rounded-2xl p-5 transition flex flex-col justify-between group"
+                className="group flex flex-col justify-between border border-border bg-surface p-5 shadow-[3px_3px_0_rgba(29,28,26,0.08)] transition hover:-translate-y-0.5 hover:border-primary-600"
               >
                 <div>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-semibold text-slate-100 text-base group-hover:text-rose-300 transition">
+                      <h3 className="text-base font-semibold text-primary-600 transition group-hover:text-accent-rose">
                         {job.title}
                       </h3>
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
-                        <span className="font-medium text-slate-300">{job.company}</span>
+                        <span className="font-medium text-primary-600">{job.company}</span>
                         <span>•</span>
                         <span className="text-slate-500">{job.source}</span>
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end">
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                      <span className="border border-accent-rose bg-surface-raised px-2.5 py-1 font-mono text-xs font-bold text-accent-rose">
                         {score}% Match
                       </span>
                       <span className="text-[10px] text-slate-500 mt-1">Below threshold</span>
                     </div>
                   </div>
 
-                  <div className="mt-4 p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs text-slate-300 space-y-1">
-                    <div className="flex items-center gap-1.5 text-rose-400 font-medium text-[11px] uppercase tracking-wider">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                  <div className="mt-4 space-y-1 border-l-2 border-accent-rose bg-background p-3 text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase text-accent-rose">
+                      <span className="h-1.5 w-1.5 bg-accent-rose" />
                       Filter explanation
                     </div>
-                    <p className="text-slate-300 text-xs leading-relaxed">
+                    <p className="text-xs leading-relaxed text-slate-600">
                       {job.filter_reason || 'Does not meet candidate core skills or required domain background.'}
                     </p>
                   </div>
@@ -124,7 +125,7 @@ export const FilteredJobsBoard: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+                <div className="mt-5 flex items-center justify-between border-t border-border pt-3">
                   <a
                     href={job.url}
                     target="_blank"

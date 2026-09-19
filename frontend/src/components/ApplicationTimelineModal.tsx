@@ -189,7 +189,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
         {items.map((item) => (
           <span
             key={`${tone}-${item}`}
-            className={`rounded-full border px-3 py-1 text-[11px] font-medium ${toneClasses}`}
+            className={`border px-3 py-1 text-[11px] font-medium ${toneClasses}`}
           >
             {item}
           </span>
@@ -201,24 +201,24 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
   if (!resolvedApplicationId) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#07110d]/30 p-4 backdrop-blur-md">
-      <div className="panel-air flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[32px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-600/60 p-4 backdrop-blur-sm">
+      <div className="panel-air flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden">
         <div className="flex items-start justify-between border-b border-border px-6 py-5">
           <div className="space-y-2 pr-6">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="hero-type text-lg font-semibold tracking-tight text-primary-600">
                 Application assets
               </h3>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono uppercase text-emerald-700">
+              <span className="border border-emerald-700 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono uppercase text-emerald-700">
                 App #{resolvedApplicationId}
               </span>
               {detail?.status === 'tailoring' && !hasTailoredAssets(detail) ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700">
+                <span className="inline-flex items-center gap-1 border border-amber-700 bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Tailoring active
                 </span>
               ) : detail?.status === 'saved' || detail?.status === 'pending_approval' || hasTailoredAssets(detail) ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
+                <span className="inline-flex items-center gap-1 border border-emerald-700 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
                   <CheckCircle2 className="h-3 w-3" />
                   Ready
                 </span>
@@ -234,7 +234,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
               onClick={() => {
                 void fetchDetail(true);
               }}
-              className="rounded-full border border-border bg-white p-2 text-slate-500 transition hover:border-primary-200 hover:text-primary-600"
+              className="border border-primary-600 bg-surface p-2 text-slate-500 transition hover:bg-primary-600 hover:text-white"
               title="Refresh application status"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -245,7 +245,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                   onRefreshJobs();
                   void fetchDetail();
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+                className="inline-flex items-center gap-2 border border-primary-600 bg-surface px-3 py-2 text-xs font-medium text-slate-600 transition hover:bg-primary-600 hover:text-white"
                 title="Load jobs"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -254,7 +254,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
             ) : null}
             <button
               onClick={onClose}
-              className="rounded-full border border-border bg-white p-2 text-slate-500 transition hover:border-primary-200 hover:text-primary-600"
+              className="border border-primary-600 bg-surface p-2 text-slate-500 transition hover:bg-primary-600 hover:text-white"
               title="Close"
             >
               <X className="h-4 w-4" />
@@ -262,10 +262,10 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
           </div>
         </div>
 
-        <div className="nav-pill mx-4 mt-3 flex items-center gap-1 overflow-x-auto rounded-full px-2 py-2 text-xs">
+        <div className="mx-4 mt-3 grid grid-cols-4 overflow-x-auto border border-primary-600 bg-background text-xs">
           <button
             onClick={() => setActiveTab('changes')}
-            className={`rounded-full px-3 py-2 font-semibold transition ${
+            className={`border-r border-primary-600 px-3 py-2 font-semibold transition ${
               activeTab === 'changes'
                 ? 'bg-primary-600 text-white'
                 : 'text-slate-500 hover:text-primary-600'
@@ -279,7 +279,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
 
           <button
             onClick={() => setActiveTab('resume')}
-            className={`rounded-full px-3 py-2 font-semibold transition ${
+            className={`border-r border-primary-600 px-3 py-2 font-semibold transition ${
               activeTab === 'resume'
                 ? 'bg-primary-600 text-white'
                 : 'text-slate-500 hover:text-primary-600'
@@ -293,7 +293,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
 
           <button
             onClick={() => setActiveTab('email')}
-            className={`rounded-full px-3 py-2 font-semibold transition ${
+            className={`border-r border-primary-600 px-3 py-2 font-semibold transition ${
               activeTab === 'email'
                 ? 'bg-primary-600 text-white'
                 : 'text-slate-500 hover:text-primary-600'
@@ -307,7 +307,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
 
           <button
             onClick={() => setActiveTab('job')}
-            className={`rounded-full px-3 py-2 font-semibold transition ${
+            className={`px-3 py-2 font-semibold transition ${
               activeTab === 'job'
                 ? 'bg-primary-600 text-white'
                 : 'text-slate-500 hover:text-primary-600'
@@ -426,7 +426,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                         href={detail.rendered_pdf_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-full bg-accent-rose px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#e36457]"
+                        className="inline-flex items-center gap-2 border border-primary-600 bg-accent-rose px-4 py-2 text-xs font-semibold text-white shadow-[2px_2px_0_#1D1C1A] transition hover:-translate-y-0.5"
                       >
                         <Download className="h-3.5 w-3.5" />
                         Download PDF
@@ -462,7 +462,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
                     {detail.email_draft && (
                       <button
                         onClick={handleCopyEmail}
-                        className="inline-flex items-center gap-2 rounded-full border border-border bg-white/90 px-4 py-2 text-xs font-medium text-slate-600 transition hover:border-primary-200 hover:text-primary-600"
+                        className="inline-flex items-center gap-2 border border-primary-600 bg-surface px-4 py-2 text-xs font-medium text-slate-600 transition hover:bg-primary-600 hover:text-white"
                       >
                         {copiedEmail ? (
                           <>
@@ -530,7 +530,7 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
           <span className="text-[11px] text-slate-500">Saved in your workspace</span>
           <button
             onClick={onClose}
-            className="rounded-full bg-primary-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#20352e]"
+            className="border border-primary-600 bg-primary-600 px-4 py-2 text-xs font-semibold text-white transition hover:-translate-y-0.5"
           >
             Close
           </button>

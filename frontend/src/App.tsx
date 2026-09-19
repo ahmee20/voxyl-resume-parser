@@ -216,32 +216,21 @@ const DashboardContent: React.FC = () => {
     <div className="min-h-screen text-primary-600 flex flex-col">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-10 space-y-8">
+      <main className="workspace-enter flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-10 space-y-8">
         {mountedTabs.has('dashboard') && (
           <div className="space-y-8" hidden={activeTab !== 'dashboard'}>
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.12fr_0.88fr]">
-              <section className="hero-grid-line relative overflow-hidden rounded-[34px] px-7 py-8 sm:px-10 sm:py-10">
-                <div className="relative z-10 max-w-2xl space-y-6">
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.32em] text-accent-emerald">
-                      AI job search workspace
-                    </p>
-                    <h1 className="hero-type text-[clamp(3.25rem,7vw,6.5rem)] font-semibold leading-[0.9] text-primary-600">
-                      Voxyl
-                    </h1>
-                    <p className="max-w-xl text-base leading-8 text-slate-600 sm:text-lg">
-                      Voxyl keeps your search focused, your resume ready, and your preferences saved so you can move
-                      faster. It gives you a cleaner starting point every time, with less resetting and more time
-                      spent on the opportunities that actually matter.
-                    </p>
-                  </div>
-
-                  <p className="max-w-2xl text-sm leading-7 text-slate-600">
-                    <strong className="font-semibold text-primary-600">Aim</strong> is making it easier for everyone
-                    to find and apply for jobs. <strong className="font-semibold text-primary-600">Impact</strong> is
-                    saving time every visit. <strong className="font-semibold text-primary-600">Voxyl Resume</strong>{' '}
-                    keeps your tailored resumes and cover letters ready when you need them.
-                  </p>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+              <section className="industrial-panel hero-grid-line module-enter relative flex min-h-[350px] flex-col justify-between overflow-hidden p-7 sm:p-10">
+                <div className="relative z-10 flex items-center justify-between border-b border-border pb-4 font-mono text-[10px] uppercase text-slate-500">
+                  <span>01 / Daily brief</span><span>{user?.preferred_name || user?.name || 'Candidate'} workspace</span>
+                </div>
+                <div className="relative z-10 py-10">
+                  <p className="section-index mb-4">CAREER APPLICATION SYSTEM</p>
+                  <h1 className="hero-type max-w-3xl text-[clamp(2.7rem,6vw,5.4rem)] font-bold leading-[0.92] text-primary-600">Build the application<br/><span className="text-accent-rose">that gets read.</span></h1>
+                  <p className="mt-6 max-w-xl text-sm leading-7 text-slate-600 sm:text-base">Your resume, target roles, and live opportunities—structured into one deliberate workflow.</p>
+                </div>
+                <div className="relative z-10 grid grid-cols-3 border-t border-primary-600 pt-4 font-mono text-[10px] uppercase text-slate-500">
+                  <span>Parse</span><span className="text-center">Match</span><span className="text-right">Apply</span>
                 </div>
               </section>
 
@@ -302,7 +291,7 @@ const DashboardContent: React.FC = () => {
         onClose={() => setSelectedApplicationId(null)}
       />
 
-      <footer className="mt-10 border-t border-border/80 py-6 bg-white/65 backdrop-blur-xl">
+      <footer className="mt-10 border-t border-primary-600 bg-surface py-6">
         <div className="mx-auto flex max-w-[1440px] flex-col items-center justify-between gap-3 px-4 text-xs text-slate-500 sm:flex-row sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
             <img src="/voxyl-mark.png" alt="Voxyl" className="h-5 w-auto" />

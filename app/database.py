@@ -10,6 +10,7 @@ Rules:
 """
 
 import socket
+import ssl
 import uuid
 from typing import AsyncGenerator
 from urllib.parse import urlparse
@@ -81,7 +82,10 @@ if "postgresql" in database_url or "asyncpg" in database_url:
 
     if ipv4_host and ipv4_host != orig_host:
         connect_args["host"] = ipv4_host
-        connect_args["server_hostname"] = orig_host
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+        connect_args["ssl"] = ssl_ctx
 
     engine_kwargs.update({
         "poolclass": NullPool,

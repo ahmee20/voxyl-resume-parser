@@ -1,31 +1,40 @@
 """
-app/services/google_delivery.py — Service for sending emails via Gmail API and filing docs in Google Drive.
+app/services/google_delivery.py — Lightweight REST-based delivery for Gmail API and Google Drive.
+Uses async httpx directly, avoiding the heavy google-api-python-client dependency.
 """
 
 import base64
+import json
+from datetime import datetime, timezone
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime, timezone
+
 import httpx
 import structlog
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 
 from app.config import settings
 
 log = structlog.get_logger(__name__)
 
 
-def build_google_credentials(refresh_token: str) -> Credentials:
-    """Build google.oauth2.credentials from refresh token."""
-    return Credentials(
-        token=None,
-        refresh_token=refresh_token,
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=settings.google_client_id,
-        client_secret=settings.google_client_secret,
-    )
+async def _get_access_token(refresh_token: str) -> str:
+    """Exchange OAuth refresh token for a fresh Google access token."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+        if resp.status_code != 200:
+            log.error("google_token_refresh_failed", status_code=resp.status_code, error=resp.text)
+            raise RuntimeError(f"Failed to refresh Google token: {resp.text}")
+        data = resp.json()
+        return data["access_token"]
 
 
 async def send_gmail_email(
@@ -44,8 +53,7 @@ async def send_gmail_email(
         log.warning("mock_gmail_send_executed", to=to_email, subject=subject)
         return "mock_message_id_123"
 
-    creds = build_google_credentials(refresh_token)
-    service = build("gmail", "v1", credentials=creds, cache_discovery=False)
+    access_token = await _get_access_token(refresh_token)
 
     message = MIMEMultipart()
     message["to"] = to_email
@@ -61,10 +69,21 @@ async def send_gmail_email(
         message.attach(pdf_attachment)
 
     raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
-    sent = service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
-    message_id = sent.get("id", "")
-    log.info("gmail_message_sent", message_id=message_id, to=to_email)
-    return message_id
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"raw": raw_message},
+        )
+        if resp.status_code not in (200, 201):
+            log.error("gmail_send_failed", status_code=resp.status_code, error=resp.text)
+            raise RuntimeError(f"Gmail API error: {resp.text}")
+
+        sent_data = resp.json()
+        message_id = sent_data.get("id", "")
+        log.info("gmail_message_sent", message_id=message_id, to=to_email)
+        return message_id
 
 
 async def create_job_drive_folder_and_upload(
@@ -84,38 +103,50 @@ async def create_job_drive_folder_and_upload(
         log.warning("mock_drive_folder_created", company=company, job_title=job_title)
         return f"https://drive.google.com/drive/folders/mock_folder_{company.lower().replace(' ', '_')}"
 
-    creds = build_google_credentials(refresh_token)
-    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    access_token = await _get_access_token(refresh_token)
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     folder_name = f"{company} — {job_title} — {date_str}"
 
-    # 1. Create Folder
-    folder_metadata = {
-        "name": folder_name,
-        "mimeType": "application/vnd.google-apps.folder",
-    }
-    folder = service.files().create(body=folder_metadata, fields="id, webViewLink").execute()
-    folder_id = folder.get("id")
-    folder_url = folder.get("webViewLink", f"https://drive.google.com/drive/folders/{folder_id}")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # 1. Create Folder
+        folder_resp = await client.post(
+            "https://www.googleapis.com/drive/v3/files?fields=id,webViewLink",
+            headers=headers,
+            json={
+                "name": folder_name,
+                "mimeType": "application/vnd.google-apps.folder",
+            },
+        )
+        if folder_resp.status_code not in (200, 201):
+            log.error("drive_folder_create_failed", status_code=folder_resp.status_code, error=folder_resp.text)
+            raise RuntimeError(f"Drive API folder creation error: {folder_resp.text}")
 
-    # 2. Upload email.txt
-    from googleapiclient.http import MediaInMemoryUpload
-    email_media = MediaInMemoryUpload(email_text.encode("utf-8"), mimetype="text/plain")
-    email_file_metadata = {
-        "name": "email_draft.txt",
-        "parents": [folder_id],
-    }
-    service.files().create(body=email_file_metadata, media_body=email_media).execute()
+        folder_data = folder_resp.json()
+        folder_id = folder_data.get("id")
+        folder_url = folder_data.get("webViewLink", f"https://drive.google.com/drive/folders/{folder_id}")
 
-    # 3. Upload PDF resume
-    if pdf_bytes:
-        pdf_media = MediaInMemoryUpload(pdf_bytes, mimetype="application/pdf")
-        pdf_file_metadata = {
-            "name": pdf_filename,
-            "parents": [folder_id],
-        }
-        service.files().create(body=pdf_file_metadata, media_body=pdf_media).execute()
+        # 2. Upload email_draft.txt
+        await client.post(
+            "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+            headers=headers,
+            files={
+                "metadata": (None, json.dumps({"name": "email_draft.txt", "parents": [folder_id]}), "application/json; charset=UTF-8"),
+                "file": ("email_draft.txt", email_text.encode("utf-8"), "text/plain"),
+            },
+        )
 
-    log.info("drive_folder_filed", folder_name=folder_name, folder_url=folder_url)
-    return folder_url
+        # 3. Upload resume PDF if present
+        if pdf_bytes:
+            await client.post(
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+                headers=headers,
+                files={
+                    "metadata": (None, json.dumps({"name": pdf_filename, "parents": [folder_id]}), "application/json; charset=UTF-8"),
+                    "file": (pdf_filename, pdf_bytes, "application/pdf"),
+                },
+            )
+
+        log.info("drive_folder_filed", folder_name=folder_name, folder_url=folder_url)
+        return folder_url

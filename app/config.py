@@ -93,8 +93,13 @@ class Settings(BaseSettings):
 
     @property
     def resolved_database_url(self) -> str:
-        """Prefer the Supabase pooler URL when one is provided."""
-        return self.supabase_pooler_url.strip() or self.database_url
+        """Prefer the Supabase pooler URL when one is provided and normalize dialect for asyncpg."""
+        raw_url = self.supabase_pooler_url.strip() or self.database_url.strip()
+        if raw_url.startswith("postgres://"):
+            raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif raw_url.startswith("postgresql://") and not raw_url.startswith("postgresql+asyncpg://"):
+            raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return raw_url
 
 
 @lru_cache(maxsize=1)

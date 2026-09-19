@@ -23,18 +23,25 @@ RESUME_TEMPLATE_PROMPT = """You convert a tailored resume into structured JSON f
 Return JSON only. Do not add markdown, commentary, or code fences.
 
 Source-of-truth precedence:
-1. TAILORED RESUME HTML is the primary source of truth.
-2. GAP ANALYSIS is the authoritative instruction for keyword additions and removals.
-3. BASE RESUME TEXT is only a fallback when tailored HTML is incomplete or missing a detail.
+1. TAILORED RESUME HTML is the primary source of truth for all content.
+2. BASE RESUME TEXT is a fallback when tailored HTML is incomplete or missing a detail.
+3. GAP ANALYSIS is for reference only — it tells you what keywords were added. It does NOT instruct you to remove anything.
+
+CRITICAL RULES — SKILLS PRESERVATION:
+- The `skills` array MUST contain EVERY skill category and EVERY skill item exactly as they appear in the tailored resume HTML or base resume text.
+- Each skill category (e.g. "Agentic AI & LLMs", "AI Automation & Integration", "ML, CV & Data", "Frontend & Backend", "Tools & Practices") must be its own object in the `skills` array with `category` and `items` keys.
+- The `items` value must be a comma-separated string of ALL the skills listed under that category — do NOT omit any.
+- Do NOT collapse multiple skill categories into one. Do NOT replace the full skills list with just the gap analysis keywords.
+- IGNORE `removed_keywords` in the gap analysis. We never remove skills.
 
 Rules:
-1. Use the tailored resume content first. Preserve the edits already made by the tailoring step, including summary revisions, skill emphasis, and any removed keywords.
-2. If a keyword or phrase appears in the gap analysis as removed_keywords, do not reintroduce it into the JSON payload from the base resume text.
-3. If the gap analysis includes added_keywords, prefer wording that matches the tailored resume and the targeted language already present in the tailored HTML. Do not revert to the original base resume wording when the tailored version intentionally changes it.
-4. If a field or section is missing from the tailored resume, fall back to the base resume text only for the missing details.
-5. PRESERVE ALL PROJECTS: You MUST include every single project present in the resume under `projects`. Do NOT remove, drop, omit, or merge any projects.
+1. Extract ALL content from the tailored resume HTML faithfully. Do not summarize, abbreviate, or omit anything.
+2. If a field or section is missing from the tailored resume, fall back to the base resume text only for the missing details.
+3. PRESERVE ALL PROJECTS: You MUST include every single project present in the resume under `projects` with ALL their bullet points. Do NOT remove, drop, omit, or merge any projects.
+4. PRESERVE ALL EXPERIENCES: Every work experience entry must appear under `experience` with ALL bullet points.
+5. PRESERVE ALL SKILLS: Every skill category must appear under `skills` with ALL items.
 6. Do not invent titles, dates, employers, degrees, skills, or certifications.
-7. If the profile block conflicts with the tailored resume or base text, the resume text wins. Do not invent the candidate's name, email, or links from account-holder data unless those details appear in the resume itself.
+7. If the profile block conflicts with the tailored resume or base text, the resume text wins.
 8. Recognize these section aliases and map them to the canonical key instead of skipping them:
    - summary: professional summary, summary, profile, overview
    - skills: technical skills, skills, core competencies, competencies
@@ -42,10 +49,10 @@ Rules:
    - projects: projects, key projects, selected projects, relevant projects, personal projects, academic projects
    - education: education, academic background, academics
    - certifications: certifications, certifications & achievements, achievements, honors, awards
-9. Prefer concise, clean values that look natural in a resume template.
-10. Return a JSON object that matches the template fields as closely as possible. When unsure about a field, leave it out rather than guessing.
-11. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
-12. Do not emit empty strings, empty arrays, or extra keys.
+9. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
+10. Do not emit empty strings, empty arrays, or extra keys.
+
+VERIFICATION BEFORE RETURNING: Count the skill categories in your output vs the input HTML. If your output has fewer categories or fewer skills per category, you have made an error — fix it.
 
 Schema:
 {

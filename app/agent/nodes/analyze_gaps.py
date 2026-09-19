@@ -31,19 +31,24 @@ CRITICAL GUARDRAIL & ETHICAL CONSTRAINT:
 - Do not invent a capability that the resume does not support at all. If the JD requires something completely absent, put it in notes.
 - When in doubt, leave it out and flag the uncertainty in notes instead.
 
+CRITICAL — NEVER REMOVE ANYTHING:
+- Do NOT suggest removing, deleting, downplaying, or omitting ANY existing skill, project, experience, tool, technology, or section from the resume.
+- ALL existing resume content must be preserved exactly as-is. The goal is to ADD relevant keywords, not subtract anything.
+- If a skill seems irrelevant for the JD, simply note it in `notes` — but it stays in the resume.
+
 Return STRICT JSON only with this schema:
 {
   "added_keywords": [
     { "keyword": "keyword or phrase", "evidence": "exact short quote from the base resume that supports this" }
   ],
-  "removed_keywords": ["keyword 1", "keyword 2"],
+  "removed_keywords": [],
   "summary": "short explanation of how to tailor the resume safely, including if the candidate is a weak match for this JD",
   "notes": ["optional note, e.g. JD requirements the candidate does not meet"]
 }
 
 Rules:
 1. `added_keywords` items must each include a real, verbatim (or near-verbatim) quote from the base resume as evidence. No quote, no entry.
-2. `removed_keywords` should contain keywords or phrases currently in the resume that should be removed, downplayed, or not claimed because they are unsupported, too weak, or irrelevant for this job.
+2. `removed_keywords` MUST always be an empty array []. Never populate it. We do not remove skills from resumes.
 3. If a keyword is a strong fit for the JD but the resume does not clearly support it, do not add it, put it in `notes` instead as a flagged gap.
 4. Keep the wording concise.
 5. Do not invent any experience, tool, or qualification not already present in the base resume text.
@@ -143,12 +148,12 @@ def _run_keyword_expansion(resume_text: str, job_description: str, current_analy
         SystemMessage(
             content=(
                 "You are an ATS keyword expansion assistant. "
-                "Given a base resume, a target job description, and an existing gap analysis, suggest only additional keywords that are a legitimate, domain-appropriate extension of the resume's real capabilities. "
+                "Given a base resume, a target job description, and an existing gap analysis, suggest additional keywords that are a legitimate, domain-appropriate extension of the resume's real capabilities. "
                 "This must work for any field, including engineering, business, operations, design, healthcare, or research. "
                 "Do not invent experience. The keyword may be more specific than the exact resume wording, but it must still be supported by a direct quote from the resume. "
                 "Return STRICT JSON only with this schema: "
                 '{"added_keywords":[{"keyword":"keyword or phrase","evidence":"exact short quote from the base resume"}]} '
-                "Limit to at most 5 new keywords and avoid duplicates."
+                "Suggest as many relevant keywords as you can find. Avoid duplicates with the existing gap analysis."
             )
         ),
         HumanMessage(
@@ -194,6 +199,8 @@ def run_gap_analysis(resume_text: str, job_description: str) -> str:
     raw = str(content).strip()
     parsed = _extract_json(raw)
     if parsed is not None:
+        # Force removed_keywords to always be empty — we never remove skills from resumes
+        parsed["removed_keywords"] = []
         parsed["added_keywords"] = _merge_added_keywords(
             parsed.get("added_keywords"),
             _run_keyword_expansion(resume_text, job_description, parsed),

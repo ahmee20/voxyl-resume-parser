@@ -20,25 +20,31 @@ log = structlog.get_logger(__name__)
 TAILOR_RESUME_SYSTEM_PROMPT = """You are an expert resume tailoring specialist.
 Your task is to take a candidate's resume in HTML format and a detailed gap analysis, and produce an updated HTML resume tailored specifically for the target job.
 
-RULES:
-1. STRICTLY PRESERVE ALL PROJECTS & EXPERIENCES: You are strictly FORBIDDEN from removing, deleting, dropping, or omitting any project, employment history, work experience, or section from the candidate's resume. Every single project from the base resume MUST be preserved in the tailored output. Never drop or summarize away a project.
-2. PRESERVE LAYOUT: Keep all HTML tags, hierarchy, section order, and CSS classes intact.
-3. TAILOR CONTENT: Refine bullet points, summary, and skills list to naturally incorporate the target keywords identified in the gap analysis. Highlight JD-relevant aspects of existing projects and roles without removing any project. Keep edits minimal, truthful, and grounded in the existing resume.
-4. SECTION ALIASES: Do not drop a section just because the heading is phrased differently. Treat headings like professional experience, work experience, industry experience, job experience, previous experience, key projects, projects, personal projects, academic projects as mandatory sections whose entries must ALL be retained.
-5. NO HALLUCINATION: Do NOT add fabricated job titles, companies, dates, degrees, or tools. Only enhance descriptions of existing genuine experience and projects.
-6. NO OLD CRITERIA: Use the provided gap analysis as the only tailoring signal. Do not reuse prior runs or job-description language that is not supported by the resume.
-7. UNCERTAINTY: If a change feels speculative, leave the original wording mostly intact and keep the edit conservative rather than forcing a new claim.
-8. OUTPUT FORMAT: Return ONLY the tailored raw HTML string (from <div class="resume"> or <div class="resume-document"> to </div>). Do not include any markdown backticks or ```html wrappers.
+ABSOLUTE RULES — VIOLATIONS ARE UNACCEPTABLE:
+1. NEVER REMOVE ANYTHING: You are strictly FORBIDDEN from removing, deleting, dropping, or omitting ANY content from the candidate's resume. This includes ALL skills, ALL projects, ALL work experiences, ALL education entries, ALL certifications, ALL bullet points, and ALL sections. Every single item from the base resume MUST appear in your output.
+2. PRESERVE ALL SKILLS VERBATIM: The Technical Skills section must contain every single skill, tool, technology, and category exactly as listed in the base resume. Do not remove React, JavaScript, Tailwind CSS, MCP, or ANY other skill — even if they seem irrelevant to the target job. A candidate's skills are factual and must not be censored.
+3. PRESERVE ALL PROJECTS: Every project must remain with all its bullet points intact.
+4. PRESERVE ALL EXPERIENCES: Every work experience entry must remain with all details.
+5. PRESERVE LAYOUT: Keep all HTML tags, hierarchy, section order, and CSS classes intact.
+6. TAILOR BY ADDING & REFINING ONLY: You may refine bullet-point wording to better highlight JD-relevant aspects. You may add new keywords from the gap analysis into existing descriptions. You may reorder emphasis within bullet points. But you must NEVER delete existing content.
+7. SECTION ALIASES: Treat headings like professional experience, work experience, industry experience, job experience, previous experience, key projects, projects, personal projects, academic projects as mandatory sections whose entries must ALL be retained.
+8. NO HALLUCINATION: Do NOT add fabricated job titles, companies, dates, degrees, or tools. Only enhance descriptions of existing genuine experience and projects.
+9. NO OLD CRITERIA: Use the provided gap analysis as the only tailoring signal.
+10. UNCERTAINTY: If a change feels speculative, leave the original wording intact.
+11. OUTPUT FORMAT: Return ONLY the tailored raw HTML string (from <div class="resume"> or <div class="resume-document"> to </div>). Do not include any markdown backticks or ```html wrappers.
+
+FINAL CHECK BEFORE OUTPUTTING: Count the number of skills categories, projects, and experience entries in your output. If ANY count is lower than in the input, you have made an error — go back and fix it.
 """
 
 
-def _gap_items(gap_analysis: str) -> tuple[list[str], list[str]]:
+def _gap_items(gap_analysis: str) -> list[str]:
+    """Extract only added_keywords from gap analysis. We never remove keywords."""
     try:
         parsed = json.loads(gap_analysis)
     except (TypeError, json.JSONDecodeError):
-        return [], []
+        return []
     if not isinstance(parsed, dict):
-        return [], []
+        return []
 
     added = parsed.get("added_keywords", [])
     added_keywords = [
@@ -46,34 +52,31 @@ def _gap_items(gap_analysis: str) -> tuple[list[str], list[str]]:
         for item in added
         if isinstance(item, dict) and isinstance(item.get("keyword"), str) and item.get("keyword", "").strip()
     ]
-    removed = parsed.get("removed_keywords", [])
-    removed_keywords = [item.strip() for item in removed if isinstance(item, str) and item.strip()]
-    return added_keywords, removed_keywords
+    return added_keywords
 
 
-def _rewrite_text_nodes(resume_html: str, added_keywords: list[str], removed_keywords: list[str]) -> str:
+def _ensure_added_keywords(resume_html: str, added_keywords: list[str]) -> str:
+    """If any added keywords are missing from the HTML, append them as a skills section.
+    This function NEVER removes or modifies any existing content."""
+    if not added_keywords:
+        return resume_html
+
     parts = re.split(r"(<[^>]+>)", resume_html)
     text_indexes = range(0, len(parts), 2)
-    for index in text_indexes:
-        text = parts[index]
-        for keyword in removed_keywords:
-            text = re.sub(rf"(?<!\w){re.escape(keyword)}(?!\w)", "", text, flags=re.IGNORECASE)
-        parts[index] = text
-
     searchable_text = " ".join(parts[index] for index in text_indexes).casefold()
+
     missing = [keyword for keyword in added_keywords if not re.search(
         rf"(?<!\w){re.escape(keyword.casefold())}(?!\w)", searchable_text
     )]
-    if missing:
-        skills_markup = "<ul>" + "".join(f"<li>{html.escape(keyword)}</li>" for keyword in missing) + "</ul>"
-        section = f'<section class="resume-section"><h2>Skills</h2>{skills_markup}</section>'
-        rewritten_html = "".join(parts)
-        closing_tag = re.search(r"</div>\s*$", rewritten_html, re.IGNORECASE)
-        if closing_tag:
-            return rewritten_html[:closing_tag.start()] + section + rewritten_html[closing_tag.start():]
-        else:
-            return rewritten_html + section
-    return "".join(parts)
+    if not missing:
+        return resume_html
+
+    skills_markup = "<ul>" + "".join(f"<li>{html.escape(keyword)}</li>" for keyword in missing) + "</ul>"
+    section = f'<section class="resume-section"><h2>Skills</h2>{skills_markup}</section>'
+    closing_tag = re.search(r"</div>\s*$", resume_html, re.IGNORECASE)
+    if closing_tag:
+        return resume_html[:closing_tag.start()] + section + resume_html[closing_tag.start():]
+    return resume_html + section
 
 
 def _ensure_profile_links(resume_html: str, user_profile: dict | None) -> str:
@@ -122,14 +125,14 @@ def run_resume_tailoring(resume_html: str, gap_analysis: str, user_profile: dict
     fence_match = re.search(r"```(?:html)?\s*(<div.*?>.*?</div>)\s*```", cleaned, re.DOTALL | re.IGNORECASE)
     if fence_match:
         candidate_html = fence_match.group(1).strip()
-        added, removed = _gap_items(gap_analysis)
-        return _ensure_profile_links(_rewrite_text_nodes(candidate_html, added, removed), user_profile)
+        added = _gap_items(gap_analysis)
+        return _ensure_profile_links(_ensure_added_keywords(candidate_html, added), user_profile)
 
     div_match = re.search(r"(<div.*?>.*?</div>)", cleaned, re.DOTALL | re.IGNORECASE)
     if div_match:
         candidate_html = div_match.group(1).strip()
-        added, removed = _gap_items(gap_analysis)
-        return _ensure_profile_links(_rewrite_text_nodes(candidate_html, added, removed), user_profile)
+        added = _gap_items(gap_analysis)
+        return _ensure_profile_links(_ensure_added_keywords(candidate_html, added), user_profile)
 
     # 3. Code fence stripping fallback
     if cleaned.startswith("```html"):
@@ -157,8 +160,8 @@ def run_resume_tailoring(resume_html: str, gap_analysis: str, user_profile: dict
         )
         return resume_html
 
-    added, removed = _gap_items(gap_analysis)
-    return _ensure_profile_links(_rewrite_text_nodes(candidate_html, added, removed), user_profile)
+    added = _gap_items(gap_analysis)
+    return _ensure_profile_links(_ensure_added_keywords(candidate_html, added), user_profile)
 
 
 def tailor_resume_node(state: GraphState) -> GraphState:

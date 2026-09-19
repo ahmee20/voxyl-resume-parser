@@ -174,9 +174,8 @@ const DashboardContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 text-primary-500 animate-spin mb-3" />
-        <p className="text-xs text-slate-500">Verifying session...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
       </div>
     );
   }

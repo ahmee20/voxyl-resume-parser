@@ -18,3 +18,5 @@ build/
 .mypy_cache/
 htmlcov/
 .coverage
+.tmpdeps*
+prompts_issues.txt

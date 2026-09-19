@@ -1,10 +1,10 @@
 import axios from 'axios';
 import type { User, UserProfileUpdate, Resume, Job, ApplicationDetail } from '../types/api';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) ?? '';
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL || undefined,
   withCredentials: true, // required for Starlette session cookies
   headers: {
     'Content-Type': 'application/json',
@@ -17,7 +17,8 @@ export const authApi = {
     return response.data;
   },
   getLoginUrl: (): string => {
-    return `${API_BASE_URL}/auth/google/login`;
+    const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+    return `${base}/auth/google/login`;
   },
   updateProfile: async (payload: UserProfileUpdate): Promise<User> => {
     const response = await apiClient.patch<User>('/auth/profile', payload);

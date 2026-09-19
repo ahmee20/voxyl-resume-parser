@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/auth/(.*)",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/auth",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/resumes/(.*)",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/resumes",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/jobs/(.*)",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/jobs",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/applications/(.*)",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/applications",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/docs",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/openapi.json",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/((?!api/|auth|resumes|jobs|applications|health|docs|openapi.json).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

@@ -25,13 +25,13 @@ CRITICAL RULES — ABSOLUTE CONTENT PRESERVATION & TARGETED TAILORING:
    - SUMMARY: Refine and tailor the summary to highlight JD relevance, but keep it substantial.
    - PROJECTS: Every single project entry must remain intact with its title, technologies, and ALL bullet points. Do NOT drop, omit, summarize, or merge ANY project.
    - EXPERIENCE: Every single work experience entry must remain intact with company name, dates, role, location, and ALL bullet points. Do NOT drop or truncate any entry.
-   - TECHNICAL SKILLS: Every skill category (e.g., "Agentic AI & LLMs", "AI Automation & Integration", "ML, CV & Data", "Frontend & Backend", "Tools & Practices") and ALL skills within each category must remain intact.
+   - TECHNICAL SKILLS: Every skill category and ALL skills within each category present in the candidate's resume must remain intact.
    - EDUCATION: Every degree, university, graduation date, and coursework must remain intact.
    - CERTIFICATIONS & AWARDS: Every certification, achievement, award, or honor must remain intact.
 
 2. PRESERVE ALL NON-REMOVED SKILLS:
-   - You MUST keep EVERY skill category and EVERY skill within each category, EXCEPT ONLY the specific individual keywords listed in `removed_keywords` of the gap analysis.
-   - NEVER drop an entire skill category.
+   - You MUST keep EVERY skill category and EVERY skill within each category from the candidate's resume, EXCEPT ONLY the specific individual keywords listed in `removed_keywords` of the gap analysis.
+   - NEVER drop any skill category present in the resume.
    - NEVER replace the skills section with just the added keywords.
    - All skills that are NOT explicitly listed in `removed_keywords` MUST be preserved verbatim!
 

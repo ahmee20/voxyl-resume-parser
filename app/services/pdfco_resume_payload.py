@@ -28,12 +28,12 @@ Source-of-truth precedence:
 3. GAP ANALYSIS documents the keyword additions and specific keyword removals applied during tailoring.
 
 CRITICAL RULES — SKILLS EXTRACTION & PRESERVATION:
-- The `skills` array MUST contain EVERY skill category and ALL remaining skill items from the tailored resume HTML (or base resume text).
-- Each skill category (e.g. "Agentic AI & LLMs", "AI Automation & Integration", "ML, CV & Data", "Frontend & Backend", "Tools & Practices") must be its own object in the `skills` array with `category` and `items` keys.
+- The `skills` array MUST contain EVERY skill category and ALL remaining skill items from the candidate's resume (or tailored resume HTML).
+- Match whatever skill groupings/categories the candidate uses (e.g., "Languages", "Frameworks", "Cloud & DevOps", or domain-specific categories). Each distinct category present in the resume must be its own object in the `skills` array with `category` and `items` keys. If the resume has a single flat list without categories, use an appropriate descriptor like "Technical Skills" or "Core Skills".
 - The `items` value must be a comma-separated string of ALL the skills listed under that category.
 - Only the specific individual keywords listed in `removed_keywords` should be excluded. ALL OTHER skills, tools, and technologies from the candidate's resume MUST be included in full!
-- NEVER collapse multiple skill categories into one single "Core" or generic category.
-- NEVER replace the full skills list with just the gap analysis added keywords. Added keywords are additions to existing skills, NOT a replacement for all other skills.
+- NEVER collapse multiple distinct skill categories into one single "Core" or generic category.
+- NEVER replace the candidate's skills list with just the gap analysis added keywords. Added keywords are additions to existing skills, NOT a replacement for all other skills.
 - If the tailored resume HTML is missing any skill category that existed in the base resume text, extract that category from the base resume text (omitting only the specific removed_keywords).
 
 Rules:
@@ -41,7 +41,7 @@ Rules:
 2. If a field or section or skill category is missing from the tailored resume, fall back to the base resume text to restore it (omitting only the specific removed_keywords).
 3. PRESERVE ALL PROJECTS: You MUST include every single project present in the resume under `projects` with ALL their bullet points. Do NOT remove, drop, omit, or merge any projects.
 4. PRESERVE ALL EXPERIENCES: Every work experience entry must appear under `experience` with ALL bullet points. Do NOT remove, drop, or omit any job entry.
-5. PRESERVE ALL SKILLS: Every skill category must appear under `skills` with ALL its items (omitting only the specific individual words in `removed_keywords`). Do NOT collapse categories or drop untouched skills.
+5. PRESERVE ALL SKILLS: Every skill category present in the candidate's resume must appear under `skills` with ALL its items (omitting only the specific individual words in `removed_keywords`). Do NOT collapse categories or drop untouched skills.
 6. PRESERVE ALL EDUCATION: Every degree, institution, date range, and coursework must appear under `education`.
 7. PRESERVE ALL CERTIFICATIONS: Every certification, achievement, award, or honor must appear under `certifications`.
 8. Do not invent titles, dates, employers, degrees, skills, or certifications.
@@ -59,7 +59,7 @@ Rules:
 VERIFICATION BEFORE RETURNING:
 - Check `projects`: Are ALL projects from the candidate's resume present? None may be missing.
 - Check `experience`: Are ALL work experiences and all bullets present? None may be missing.
-- Check `skills`: Are ALL skill categories (e.g. Agentic AI & LLMs, AI Automation & Integration, ML, CV & Data, Frontend & Backend, Tools & Practices) present with all their items? Only specific `removed_keywords` should be excluded.
+- Check `skills`: Are ALL skill categories and all skills from the candidate's resume present with all their items? Only specific `removed_keywords` should be excluded.
 - Check `education` and `certifications`: Are all entries included?
 If any item was omitted in the tailored HTML, you MUST restore it from the base resume text before returning!
 

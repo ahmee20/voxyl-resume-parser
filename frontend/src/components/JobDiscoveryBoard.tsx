@@ -27,6 +27,8 @@ interface JobDiscoveryBoardProps {
   showLoadJobsButton?: boolean;
   onDiscoverySuccess?: () => void;
   suspendAutoRefresh?: boolean;
+  hideJobList?: boolean;
+  onNavigateToJobs?: () => void;
 }
 
 type DiscoveryStats = {
@@ -78,6 +80,8 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   showLoadJobsButton = true,
   onDiscoverySuccess,
   suspendAutoRefresh: _suspendAutoRefresh,
+  hideJobList = false,
+  onNavigateToJobs,
 }) => {
   const { user } = useAuth();
   const cacheKey = useMemo(
@@ -206,6 +210,23 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       setJobs(untailored);
       setHasSessionSnapshot(true);
       persistCache(untailored, nextStats, selectedCountries);
+
+      // Keep the main untailored jobs cache in sync so Jobs tab has discovered jobs immediately
+      try {
+        const untailoredKey = `voxyl.jobs.untailored.${user.id ?? 'guest'}`;
+        sessionStorage.setItem(
+          untailoredKey,
+          JSON.stringify({
+            jobs: untailored,
+            discoveryStats: nextStats,
+            selectedCountries,
+            cachedAt: Date.now(),
+          } satisfies DiscoveryCacheSnapshot)
+        );
+      } catch {
+        // ignore
+      }
+
       onDiscoverySuccess?.();
     } catch {
       // ignore
@@ -396,240 +417,269 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
         </div>
 
         {discoveryStats && (
-          <div className="mt-4 text-sm text-slate-600">
-            Found <strong className="font-semibold text-primary-600">{discoveryStats.scraped}</strong> matching opportunities.
+          <div className="mt-4 text-sm text-slate-600 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
+            <span>
+              Found <strong className="font-semibold text-primary-600">{discoveryStats.scraped}</strong> new opportunities.
+            </span>
+            <span>
+              Go to{' '}
+              {onNavigateToJobs ? (
+                <button
+                  type="button"
+                  onClick={onNavigateToJobs}
+                  className="font-bold text-primary-600 underline underline-offset-4 decoration-2 decoration-primary-600 hover:text-accent-rose hover:decoration-accent-rose transition-colors cursor-pointer inline"
+                >
+                  Jobs
+                </button>
+              ) : (
+                <span className="font-bold text-primary-600 underline underline-offset-4 decoration-2">Jobs</span>
+              )}{' '}
+              to view jobs.
+            </span>
           </div>
         )}
       </div>
 
-      {/* Discovered Jobs List Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
-            <Briefcase className="w-4 h-4 text-primary-500" />
-            <span>Discovered opportunities</span>
-            <span className="border border-border bg-surface px-2 py-0.5 font-mono text-xs text-slate-500">
-              {jobs.length} Available
-            </span>
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Click a card to inspect details, or select checkboxes to tailor several jobs at once.
-          </p>
-        </div>
+      {hideJobList ? (
+        /* If job list is hidden (e.g. Dashboard), only show discovering loader during scraping */
+        isDiscovering ? (
+          <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
+            <p className="text-xs text-slate-500">Discovering and enriching jobs from live postings...</p>
+          </div>
+        ) : null
+      ) : (
+        <>
+          {/* Discovered Jobs List Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-primary-600">
+                <Briefcase className="w-4 h-4 text-primary-500" />
+                <span>Discovered opportunities</span>
+                <span className="border border-border bg-surface px-2 py-0.5 font-mono text-xs text-slate-500">
+                  {jobs.length} Available
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Click a card to inspect details, or select checkboxes to tailor several jobs at once.
+              </p>
+            </div>
 
-        {jobs.length > 0 && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={selectAllUntailored}
-              className="border border-primary-600 bg-surface px-3 py-1.5 text-xs text-slate-600 transition-colors hover:bg-primary-600 hover:text-white"
-            >
-              Select All
-            </button>
-            {selectedJobIds.length > 0 && (
-              <button
-                onClick={clearSelection}
-                className="border border-transparent px-2.5 py-1.5 text-xs text-slate-500 hover:border-border hover:text-primary-600"
-              >
-                Clear
-              </button>
+            {jobs.length > 0 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={selectAllUntailored}
+                  className="border border-primary-600 bg-surface px-3 py-1.5 text-xs text-slate-600 transition-colors hover:bg-primary-600 hover:text-white"
+                >
+                  Select All
+                </button>
+                {selectedJobIds.length > 0 && (
+                  <button
+                    onClick={clearSelection}
+                    className="border border-transparent px-2.5 py-1.5 text-xs text-slate-500 hover:border-border hover:text-primary-600"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
 
-      {/* Loading / Empty States */}
-      {isDiscovering ? (
-        <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
-          <p className="text-xs text-slate-500">Discovering and enriching jobs from live postings...</p>
-        </div>
-      ) : jobs.length === 0 ? (
-        <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
-          <Compass className="w-10 h-10 text-slate-400 mx-auto" />
-          <h4 className="text-sm font-semibold text-primary-600">No active discovered jobs</h4>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Click "Discover jobs" to scrape matching opportunities based on your profile roles and countries.
-          </p>
-        </div>
-      ) : (
-        /* Jobs Grid */
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {jobs.map((job) => {
-            const isProcessing = runningJobId === job.id;
-            const apollo = job.apollo_enrichment;
-            const isSelected = selectedJobIds.includes(job.id);
+          {/* Loading / Empty States */}
+          {isDiscovering ? (
+            <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
+              <Loader2 className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
+              <p className="text-xs text-slate-500">Discovering and enriching jobs from live postings...</p>
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="rounded-[28px] bg-white/45 p-10 text-center space-y-3">
+              <Compass className="w-10 h-10 text-slate-400 mx-auto" />
+              <h4 className="text-sm font-semibold text-primary-600">No active discovered jobs</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Click "Discover jobs" to scrape matching opportunities based on your profile roles and countries.
+              </p>
+            </div>
+          ) : (
+            /* Jobs Grid */
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {jobs.map((job) => {
+                const isProcessing = runningJobId === job.id;
+                const apollo = job.apollo_enrichment;
+                const isSelected = selectedJobIds.includes(job.id);
 
-            return (
-              <div
-                key={job.id}
-                onClick={() => handleCardClick(job)}
-                className={`group relative flex cursor-pointer flex-col justify-between space-y-4 border border-border bg-surface p-5 shadow-[3px_3px_0_rgba(29,28,26,0.08)] ${
-                  isSelected
-                    ? 'ring-1 ring-primary-200'
-                    : 'hover:-translate-y-0.5 hover:border-primary-600 hover:shadow-[5px_5px_0_rgba(29,28,26,0.12)]'
-                }`}
-              >
-                {/* Top Status & Checkbox */}
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-3 flex-1">
-                      {/* Multi-select Checkbox */}
-                      <button
-                        type="button"
-                        onClick={(e) => toggleJobSelection(job.id, e)}
-                        className="mt-0.5 text-slate-400 hover:text-primary-500 transition-colors shrink-0"
-                        title={isSelected ? 'Deselect job' : 'Select job for batch tailoring'}
-                      >
-                        {isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-primary-500" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-400 group-hover:text-slate-500" />
-                        )}
-                      </button>
+                return (
+                  <div
+                    key={job.id}
+                    onClick={() => handleCardClick(job)}
+                    className={`group relative flex cursor-pointer flex-col justify-between space-y-4 border border-border bg-surface p-5 shadow-[3px_3px_0_rgba(29,28,26,0.08)] ${
+                      isSelected
+                        ? 'ring-1 ring-primary-200'
+                        : 'hover:-translate-y-0.5 hover:border-primary-600 hover:shadow-[5px_5px_0_rgba(29,28,26,0.12)]'
+                    }`}
+                  >
+                    {/* Top Status & Checkbox */}
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-3 flex-1">
+                          {/* Multi-select Checkbox */}
+                          <button
+                            type="button"
+                            onClick={(e) => toggleJobSelection(job.id, e)}
+                            className="mt-0.5 text-slate-400 hover:text-primary-500 transition-colors shrink-0"
+                            title={isSelected ? 'Deselect job' : 'Select job for batch tailoring'}
+                          >
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-primary-500" />
+                            ) : (
+                              <Square className="w-4 h-4 text-slate-400 group-hover:text-slate-500" />
+                            )}
+                          </button>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase text-slate-500">
-                            Untailored
-                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase text-slate-500">
+                                Untailored
+                              </span>
 
-                          {job.match_score && (
-                            <span className="border border-primary-600 px-2 py-0.5 font-mono text-[10px] font-medium text-primary-600">
-                              {job.match_score}% Match
-                            </span>
-                          )}
+                              {job.match_score && (
+                                <span className="border border-primary-600 px-2 py-0.5 font-mono text-[10px] font-medium text-primary-600">
+                                  {job.match_score}% Match
+                                </span>
+                              )}
+                            </div>
+
+                            <h3 className="text-sm font-semibold text-primary-600 leading-snug group-hover:text-primary-500 transition-colors line-clamp-1">
+                              {job.title || 'Untitled Position'}
+                            </h3>
+                            <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                              {currentCountryLabel(apollo?.location || apollo?.country)}
+                            </p>
+                          </div>
                         </div>
 
-                        <h3 className="text-sm font-semibold text-primary-600 leading-snug group-hover:text-primary-500 transition-colors line-clamp-1">
-                          {job.title || 'Untitled Position'}
-                        </h3>
-                        <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                          {currentCountryLabel(apollo?.location || apollo?.country)}
-                        </p>
+                        <a
+                          href={job.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-slate-400 hover:text-primary-600 p-1 shrink-0"
+                          title="View original job posting"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-slate-500 pl-7">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{job.company || 'Unknown Company'}</span>
                       </div>
                     </div>
 
-                    <a
-                      href={job.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-slate-400 hover:text-primary-600 p-1 shrink-0"
-                      title="View original job posting"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs text-slate-500 pl-7">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{job.company || 'Unknown Company'}</span>
-                  </div>
-                </div>
-
-                {apollo && (
-                  <div className="space-y-2 text-xs ml-7">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Layers className="w-3 h-3" /> Company insights
-                      </span>
-                      {apollo.verified && <span className="text-slate-500 font-medium">Verified</span>}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      {apollo.domain && (
-                        <div className="text-slate-500 truncate">
-                          Domain: <span className="text-slate-700">{apollo.domain}</span>
+                    {apollo && (
+                      <div className="space-y-2 text-xs ml-7">
+                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <Layers className="w-3 h-3" /> Company insights
+                          </span>
+                          {apollo.verified && <span className="text-slate-500 font-medium">Verified</span>}
                         </div>
-                      )}
-                      {apollo.estimated_num_employees && (
-                        <div className="text-slate-500 flex items-center gap-1">
-                          <Users className="w-3 h-3 text-slate-400" />
-                          <span className="text-slate-700">{apollo.estimated_num_employees} employees</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
 
-                {/* Recruiter Email & Action Footer */}
-                <div className="flex items-center justify-between text-xs pt-2 border-t border-white/60 ml-7">
-                  <div className="flex items-center gap-1.5 text-slate-500 truncate max-w-[220px]">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    {job.recruiter_email ? (
-                      <span className="text-slate-700 font-mono text-[11px] truncate" title={job.recruiter_email}>
-                        {job.recruiter_email}
-                      </span>
-                    ) : apollo?.recruiter_name ? (
-                      <span className="text-slate-600 text-[11px] truncate" title={apollo.recruiter_name}>
-                        {apollo.recruiter_name} {apollo.recruiter_title ? `(${apollo.recruiter_title})` : ''}
-                      </span>
-                    ) : (
-                      <span className="text-slate-500 text-[11px]">Direct outreach ready</span>
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          {apollo.domain && (
+                            <div className="text-slate-500 truncate">
+                              Domain: <span className="text-slate-700">{apollo.domain}</span>
+                            </div>
+                          )}
+                          {apollo.estimated_num_employees && (
+                            <div className="text-slate-500 flex items-center gap-1">
+                              <Users className="w-3 h-3 text-slate-400" />
+                              <span className="text-slate-700">{apollo.estimated_num_employees} employees</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     )}
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => handleSingleJobTailor(job, e)}
-                      disabled={!activeResume || isProcessing}
-                      className="flex items-center gap-1.5 border border-primary-600 bg-surface px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white"
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Starting...</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Tailor Now</span>
-                        </>
-                      )}
-                    </button>
+                    {/* Recruiter Email & Action Footer */}
+                    <div className="flex items-center justify-between text-xs pt-2 border-t border-white/60 ml-7">
+                      <div className="flex items-center gap-1.5 text-slate-500 truncate max-w-[220px]">
+                        <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        {job.recruiter_email ? (
+                          <span className="text-slate-700 font-mono text-[11px] truncate" title={job.recruiter_email}>
+                            {job.recruiter_email}
+                          </span>
+                        ) : apollo?.recruiter_name ? (
+                          <span className="text-slate-600 text-[11px] truncate" title={apollo.recruiter_name}>
+                            {apollo.recruiter_name} {apollo.recruiter_title ? `(${apollo.recruiter_title})` : ''}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-[11px]">Direct outreach ready</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => handleSingleJobTailor(job, e)}
+                          disabled={!activeResume || isProcessing}
+                          className="flex items-center gap-1.5 border border-primary-600 bg-surface px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white"
+                        >
+                          {isProcessing ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Starting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Tailor Now</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Floating Multi-Select Action Bar */}
+          {selectedJobIds.length > 0 && (
+            <div className="fixed bottom-6 left-1/2 z-40 flex max-w-[90vw] -translate-x-1/2 items-center gap-4 overflow-x-auto border border-primary-600 bg-primary-600 px-5 py-3 text-white shadow-[5px_5px_0_#D55335]">
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="flex h-2 w-2 bg-accent-emerald animate-pulse" />
+                <span className="text-xs font-semibold text-white">
+                  {selectedJobIds.length} Job{selectedJobIds.length > 1 ? 's' : ''} Selected
+                </span>
               </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* Floating Multi-Select Action Bar */}
-      {selectedJobIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-40 flex max-w-[90vw] -translate-x-1/2 items-center gap-4 overflow-x-auto border border-primary-600 bg-primary-600 px-5 py-3 text-white shadow-[5px_5px_0_#D55335]">
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="flex h-2 w-2 bg-accent-emerald animate-pulse" />
-            <span className="text-xs font-semibold text-white">
-              {selectedJobIds.length} Job{selectedJobIds.length > 1 ? 's' : ''} Selected
-            </span>
-          </div>
+              <div className="h-4 w-px bg-border shrink-0" />
 
-          <div className="h-4 w-px bg-border shrink-0" />
+              <button
+                onClick={handleBatchTailor}
+                disabled={!activeResume || isBatchRunning}
+                className="flex shrink-0 items-center gap-2 border border-white bg-accent-emerald px-5 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
+              >
+                {isBatchRunning ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Launching Parallel Agents...
+                  </>
+                ) : (
+                  <>
+                    Generate Resumes &amp; Cover Emails ({selectedJobIds.length})
+                  </>
+                )}
+              </button>
 
-          <button
-            onClick={handleBatchTailor}
-            disabled={!activeResume || isBatchRunning}
-            className="flex shrink-0 items-center gap-2 border border-white bg-accent-emerald px-5 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-50"
-          >
-            {isBatchRunning ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Launching Parallel Agents...
-              </>
-            ) : (
-              <>
-                Generate Resumes &amp; Cover Emails ({selectedJobIds.length})
-              </>
-            )}
-          </button>
-
-          <button
-            onClick={clearSelection}
-            className="shrink-0 text-xs text-white/70 hover:text-white"
-          >
-            Cancel
-          </button>
-        </div>
+              <button
+                onClick={clearSelection}
+                className="shrink-0 text-xs text-white/70 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Job Details Modal */}

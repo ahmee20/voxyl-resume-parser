@@ -245,6 +245,8 @@ const DashboardContent: React.FC = () => {
               showLoadJobsButton={false}
               suspendAutoRefresh={isApplicationSessionActive}
               onDiscoverySuccess={() => setShowLatestDashboardJobs(true)}
+              hideJobList={true}
+              onNavigateToJobs={() => setActiveTab('jobs')}
             />
           </div>
         )}

@@ -43,7 +43,7 @@ Return STRICT JSON only with this schema:
 
 Rules:
 1. `added_keywords` items must each include a real, verbatim (or near-verbatim) quote from the base resume as evidence. No quote, no entry.
-2. `removed_keywords` should contain specific keywords or phrases currently in the resume that should be removed, downplayed, or not claimed because they are unsupported, too weak, or irrelevant for this specific job. Only specify the exact individual terms to remove — do NOT suggest removing entire categories, sections, or unrelated skills.
+2. `removed_keywords`: Only include a keyword if it is genuinely conflicting, contradictory, or misleading for the target role. DO NOT suggest removing skills, programming languages, tools, frameworks, projects, experiences, or certifications simply because the JD does not mention them. A candidate's legitimate background, projects, and skills must be retained. Never specify entire categories or sections for removal.
 3. If a keyword is a strong fit for the JD but the resume does not clearly support it, do not add it, put it in `notes` instead as a flagged gap.
 4. Keep the wording concise.
 5. Do not invent any experience, tool, or qualification not already present in the base resume text.

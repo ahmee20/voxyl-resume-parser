@@ -20,22 +20,23 @@ log = structlog.get_logger(__name__)
 TAILOR_RESUME_SYSTEM_PROMPT = """You are an expert resume tailoring specialist.
 Your task is to take a candidate's resume in HTML format and a detailed gap analysis, and produce an updated HTML resume tailored specifically for the target job.
 
-CRITICAL RULES FOR CONTENT PRESERVATION & TAILORING:
-1. PRESERVE ALL PROJECTS & EXPERIENCES:
-   - Every single project entry must remain intact under its section with all its bullet points.
-   - Every single work experience entry must remain intact with company name, dates, role, and all bullet points.
-   - Every single education entry and certification must remain intact.
-   - Do NOT drop, omit, summarize, or remove ANY projects or experience entries.
+CRITICAL RULES — ABSOLUTE CONTENT PRESERVATION & TARGETED TAILORING:
+1. PRESERVE EVERY SECTION:
+   - SUMMARY: Refine and tailor the summary to highlight JD relevance, but keep it substantial.
+   - PROJECTS: Every single project entry must remain intact with its title, technologies, and ALL bullet points. Do NOT drop, omit, summarize, or merge ANY project.
+   - EXPERIENCE: Every single work experience entry must remain intact with company name, dates, role, location, and ALL bullet points. Do NOT drop or truncate any entry.
+   - TECHNICAL SKILLS: Every skill category (e.g., "Agentic AI & LLMs", "AI Automation & Integration", "ML, CV & Data", "Frontend & Backend", "Tools & Practices") and ALL skills within each category must remain intact.
+   - EDUCATION: Every degree, university, graduation date, and coursework must remain intact.
+   - CERTIFICATIONS & AWARDS: Every certification, achievement, award, or honor must remain intact.
 
-2. PRESERVE ALL SKILL CATEGORIES & ALL NON-REMOVED SKILLS:
-   - The Technical Skills section contains multiple skill categories (e.g., "Agentic AI & LLMs", "AI Automation & Integration", "ML, CV & Data", "Frontend & Backend", "Tools & Practices").
+2. PRESERVE ALL NON-REMOVED SKILLS:
    - You MUST keep EVERY skill category and EVERY skill within each category, EXCEPT ONLY the specific individual keywords listed in `removed_keywords` of the gap analysis.
    - NEVER drop an entire skill category.
-   - NEVER replace the entire skills section with just the added keywords.
+   - NEVER replace the skills section with just the added keywords.
    - All skills that are NOT explicitly listed in `removed_keywords` MUST be preserved verbatim!
 
 3. APPLY `removed_keywords`:
-   - You MUST remove only the specific keywords/skills explicitly listed in `removed_keywords` of the gap analysis.
+   - You MUST remove only the specific individual keywords explicitly listed in `removed_keywords` of the gap analysis.
    - Do NOT remove any skill that is not in `removed_keywords`.
 
 4. INTEGRATE `added_keywords`:
@@ -50,8 +51,10 @@ CRITICAL RULES FOR CONTENT PRESERVATION & TAILORING:
    - Do NOT invent fabricated job titles, companies, dates, degrees, or tools. Only enhance genuine experience and skills.
 
 FINAL CHECK BEFORE OUTPUTTING:
-Count the number of skill categories, projects, and experience entries in your output. If ANY skill category, project, or experience entry from the base resume is missing, fix it before returning.
+Count the number of skill categories, projects, and experience entries in your output. If ANY skill category, project, experience, education, or certification entry from the base resume is missing, fix it before returning.
 """
+
+STOP_WORDS = {"and", "or", "the", "a", "an", "in", "on", "at", "to", "for", "with", "by", "of", "is", "as"}
 
 
 def _gap_items(gap_analysis: str) -> tuple[list[str], list[str]]:
@@ -70,7 +73,10 @@ def _gap_items(gap_analysis: str) -> tuple[list[str], list[str]]:
         if isinstance(item, dict) and isinstance(item.get("keyword"), str) and item.get("keyword", "").strip()
     ]
     removed = parsed.get("removed_keywords", [])
-    removed_keywords = [item.strip() for item in removed if isinstance(item, str) and item.strip()]
+    removed_keywords = [
+        item.strip() for item in removed
+        if isinstance(item, str) and item.strip() and item.strip().lower() not in STOP_WORDS
+    ]
     return added_keywords, removed_keywords
 
 
@@ -81,7 +87,13 @@ def _rewrite_text_nodes(resume_html: str, added_keywords: list[str], removed_key
     for index in text_indexes:
         text = parts[index]
         for keyword in removed_keywords:
-            text = re.sub(rf"(?<!\w){re.escape(keyword)}(?!\w)", "", text, flags=re.IGNORECASE)
+            if not keyword or keyword.lower() in STOP_WORDS:
+                continue
+            if len(keyword) == 1:
+                # Case-sensitive for single letter (e.g. 'C', 'R')
+                text = re.sub(rf"(?<!\w){re.escape(keyword)}(?!\w)", "", text)
+            else:
+                text = re.sub(rf"(?<!\w){re.escape(keyword)}(?!\w)", "", text, flags=re.IGNORECASE)
         # Clean up punctuation artifacts from removals
         text = re.sub(r",\s*,+", ", ", text)
         text = re.sub(r":\s*,\s*", ": ", text)

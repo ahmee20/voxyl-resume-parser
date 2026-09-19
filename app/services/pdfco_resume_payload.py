@@ -40,23 +40,28 @@ Rules:
 1. Extract ALL content from the tailored resume HTML faithfully. Do not summarize, abbreviate, or omit anything.
 2. If a field or section or skill category is missing from the tailored resume, fall back to the base resume text to restore it (omitting only the specific removed_keywords).
 3. PRESERVE ALL PROJECTS: You MUST include every single project present in the resume under `projects` with ALL their bullet points. Do NOT remove, drop, omit, or merge any projects.
-4. PRESERVE ALL EXPERIENCES: Every work experience entry must appear under `experience` with ALL bullet points.
-5. PRESERVE ALL SKILLS: Every skill category must appear under `skills` with ALL its items (omitting only the specific removed_keywords).
-6. Do not invent titles, dates, employers, degrees, skills, or certifications.
-7. If the profile block conflicts with the tailored resume or base text, the resume text wins.
-8. Recognize these section aliases and map them to the canonical key instead of skipping them:
+4. PRESERVE ALL EXPERIENCES: Every work experience entry must appear under `experience` with ALL bullet points. Do NOT remove, drop, or omit any job entry.
+5. PRESERVE ALL SKILLS: Every skill category must appear under `skills` with ALL its items (omitting only the specific individual words in `removed_keywords`). Do NOT collapse categories or drop untouched skills.
+6. PRESERVE ALL EDUCATION: Every degree, institution, date range, and coursework must appear under `education`.
+7. PRESERVE ALL CERTIFICATIONS: Every certification, achievement, award, or honor must appear under `certifications`.
+8. Do not invent titles, dates, employers, degrees, skills, or certifications.
+9. If the profile block conflicts with the tailored resume or base text, the resume text wins.
+10. Recognize these section aliases and map them to the canonical key instead of skipping them:
    - summary: professional summary, summary, profile, overview
    - skills: technical skills, skills, core competencies, competencies
    - experience: professional experience, work experience, industry experience, job experience, previous experience, employment history, career history
    - projects: projects, key projects, selected projects, relevant projects, personal projects, academic projects
    - education: education, academic background, academics
    - certifications: certifications, certifications & achievements, achievements, honors, awards
-9. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
-10. Do not emit empty strings, empty arrays, or extra keys.
+11. Use only these top-level keys: full_name, headline, phone, email, linkedin_url, github_url, summary, skills, experience, projects, education, certifications.
+12. Do not emit empty strings, empty arrays, or extra keys.
 
 VERIFICATION BEFORE RETURNING:
-- Count the skill categories in your output vs the candidate's resume. If the candidate had 5 skill categories (e.g. Agentic AI & LLMs, AI Automation & Integration, ML, CV & Data, Frontend & Backend, Tools & Practices), your output MUST have all 5 categories.
-- Ensure that only the specific keywords from `removed_keywords` are omitted, and that ALL OTHER skills and categories remain intact.
+- Check `projects`: Are ALL projects from the candidate's resume present? None may be missing.
+- Check `experience`: Are ALL work experiences and all bullets present? None may be missing.
+- Check `skills`: Are ALL skill categories (e.g. Agentic AI & LLMs, AI Automation & Integration, ML, CV & Data, Frontend & Backend, Tools & Practices) present with all their items? Only specific `removed_keywords` should be excluded.
+- Check `education` and `certifications`: Are all entries included?
+If any item was omitted in the tailored HTML, you MUST restore it from the base resume text before returning!
 
 Schema:
 {

@@ -8,6 +8,7 @@ import { ResumeUpload } from './components/ResumeUpload';
 import { JobDiscoveryBoard } from './components/JobDiscoveryBoard';
 import { ApplicationTracker } from './components/ApplicationTracker';
 import { ApplicationTimelineModal } from './components/ApplicationTimelineModal';
+import { AuthorDisclaimerModal } from './components/AuthorDisclaimerModal';
 import type { Resume } from './types/api';
 
 const ACTIVE_TAB_KEY = 'voxyl.activeTab';
@@ -141,6 +142,13 @@ const DashboardContent: React.FC = () => {
   );
   const isApplicationSessionActive = selectedApplicationId !== null;
   const dashboardBatchKey = user?.id ? `${DASHBOARD_BATCH_KEY}.${user.id}` : null;
+  const [showAuthorDisclaimer, setShowAuthorDisclaimer] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setShowAuthorDisclaimer(true);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     sessionStorage.setItem(ACTIVE_TAB_KEY, activeTab);
@@ -196,6 +204,10 @@ const DashboardContent: React.FC = () => {
       <div className="min-h-screen text-primary-600 flex flex-col">
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
         <ProfileSetup mode="onboarding" />
+        <AuthorDisclaimerModal
+          open={showAuthorDisclaimer}
+          onClose={() => setShowAuthorDisclaimer(false)}
+        />
       </div>
     );
   }
@@ -291,6 +303,11 @@ const DashboardContent: React.FC = () => {
         userId={user?.id}
         onRefreshJobs={handleRefreshApplications}
         onClose={() => setSelectedApplicationId(null)}
+      />
+
+      <AuthorDisclaimerModal
+        open={showAuthorDisclaimer}
+        onClose={() => setShowAuthorDisclaimer(false)}
       />
 
       <footer className="mt-10 border-t border-primary-600 bg-surface py-6">

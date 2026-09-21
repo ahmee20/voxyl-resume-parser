@@ -23,9 +23,9 @@ export const AuthorDisclaimerModal: React.FC<AuthorDisclaimerModalProps> = ({ op
                 HONEST DISCLAIMER
               </p>
               <h3 className="hero-type text-xl font-bold text-primary-600">
-                The Author is Poor 💸
+                The Author is Poor
               </h3>
-              <p className="text-xs text-slate-500">A very important message about free API quotas</p>
+              <p className="text-xs text-slate-500">A quick message regarding free API quotas</p>
             </div>
           </div>
 
@@ -42,16 +42,16 @@ export const AuthorDisclaimerModal: React.FC<AuthorDisclaimerModalProps> = ({ op
         <div className="px-5 py-5 sm:px-6 space-y-4 bg-background">
           <div className="space-y-3 border-l-2 border-amber-500 bg-surface p-4 text-sm leading-relaxed text-slate-700">
             <p className="font-semibold text-primary-700">
-              Hey there! Welcome to Voxyl. Before you dive in, here is the honest truth:
+              Welcome to Voxyl. Please keep the following in mind:
             </p>
             <p className="text-slate-600 text-xs sm:text-sm">
-              This entire app is held together by hope, duct tape, and a pipeline of <strong>multiple free-tier APIs</strong> (LLMs, scrapers, search engines, and PDF converters) — because your author is broke and cannot afford enterprise GPU clusters yet 🥲.
+              This application uses a pipeline of <strong>multiple free-tier APIs</strong> (LLMs, scrapers, search engines, and PDF converters), as the author cannot afford dedicated enterprise GPU infrastructure.
             </p>
             <p className="text-slate-600 text-xs sm:text-sm">
-              If the system randomly stalls, throws an error, or doesn't work as expected, don't panic! It usually just means our <strong>daily free API quota ran dry</strong>.
+              If the system fails, stalls, or behaves unexpectedly, it usually means the <strong>daily free API credits have reached their limit</strong>.
             </p>
             <div className="bg-amber-500/10 p-3 border border-amber-500/30 text-xs text-slate-700 leading-relaxed">
-              💡 <strong>For the best & uninterrupted experience:</strong> Head over to the GitHub repo, clone it, and run it locally with your own API keys for blazing-fast, unlimited tailoring!
+              <strong>Recommended Setup:</strong> For the best experience without rate limits, visit the GitHub repository, clone the project, and run it locally with your own API keys.
             </div>
           </div>
 
@@ -71,7 +71,7 @@ export const AuthorDisclaimerModal: React.FC<AuthorDisclaimerModalProps> = ({ op
               onClick={onClose}
               className="border border-primary-600 bg-accent-rose px-5 py-2.5 text-xs font-bold text-white shadow-[2px_2px_0_#1D1C1A] hover:-translate-y-0.5 transition"
             >
-              I Understand, Let's Go 🚀
+              I Understand, Continue
             </button>
           </div>
         </div>

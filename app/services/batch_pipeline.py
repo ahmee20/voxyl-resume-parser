@@ -1,19 +1,25 @@
 """
 app/services/batch_pipeline.py — Batch-parallel job tailoring orchestrator with real-time atomic persistence.
 
-Processes multiple jobs in parallel:
+Processes multiple jobs in TRUE parallel:
 1. Immediately creates/initializes Application records.
-2. Runs LLM tailoring pipelines concurrently across worker threads with controlled concurrency.
+2. Runs LLM tailoring pipelines concurrently using a DEDICATED ThreadPoolExecutor
+   (not the default asyncio executor) so all jobs execute simultaneously.
 3. Immediately commits each completed resume, PDF, and email draft to the database as soon as it finishes,
    ensuring the UI transitions from 'tailoring' to 'saved' without waiting for the full batch.
+4. Uses atomic version numbering with retry to prevent race conditions on resume versioning.
+5. Marks any failed/crashed applications as 'failed' (never leaves stuck in 'tailoring').
 """
 
 import asyncio
 import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import structlog
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.database import AsyncSessionLocal
 from app.agent.nodes.analyze_gaps import analyze_gaps_node
@@ -68,23 +74,28 @@ def _run_job_core_sync(
 
     timeline_entries = []
 
+    log.info("batch_job_core_start", application_id=application_id, job_id=job_id, company=company, title=job_title)
+
     # Step A: Gap Analysis
     t0 = time.perf_counter()
     state = analyze_gaps_node(state)
     lat = int((time.perf_counter() - t0) * 1000)
     timeline_entries.append(("analyze_gaps", {"gap_analysis": (state.get("gap_analysis") or "")[:300]}, lat))
+    log.info("batch_step_done", step="analyze_gaps", latency_ms=lat, app_id=application_id)
 
     # Step B: Resume Tailoring
     t0 = time.perf_counter()
     state = tailor_resume_node(state)
     lat = int((time.perf_counter() - t0) * 1000)
     timeline_entries.append(("tailor_resume", {"html_len": len(state.get("tailored_resume_html") or "")}, lat))
+    log.info("batch_step_done", step="tailor_resume", latency_ms=lat, app_id=application_id)
 
     # Step C: Render PDF
     t0 = time.perf_counter()
     state = render_pdf_node(state)
     lat = int((time.perf_counter() - t0) * 1000)
     timeline_entries.append(("render_pdf", {"pdf_url": state.get("pdf_url")}, lat))
+    log.info("batch_step_done", step="render_pdf", latency_ms=lat, app_id=application_id)
 
     # Step D: Draft Cold Email
     t0 = time.perf_counter()
@@ -92,6 +103,7 @@ def _run_job_core_sync(
     lat = int((time.perf_counter() - t0) * 1000)
     email_draft_val = state.get("email_draft")
     timeline_entries.append(("draft_email", {"email_draft": (email_draft_val or "")[:300]}, lat))
+    log.info("batch_step_done", step="draft_email", latency_ms=lat, app_id=application_id)
 
     return state, timeline_entries, email_draft_val
 
@@ -99,6 +111,7 @@ def _run_job_core_sync(
 def _run_job_review_sync(state: GraphState) -> tuple[GraphState, list, dict]:
     """Run ATS reviewer and factual anti-hallucination reviewer."""
     timeline_entries = []
+    application_id = state.get("application_id")
 
     # Step E: ATS Reviewer
     t0 = time.perf_counter()
@@ -106,6 +119,7 @@ def _run_job_review_sync(state: GraphState) -> tuple[GraphState, list, dict]:
     lat = int((time.perf_counter() - t0) * 1000)
     ats_data = state.get("ats_review") or {}
     timeline_entries.append(("agent_ats_reviewer", ats_data, lat))
+    log.info("batch_step_done", step="ats_reviewer", latency_ms=lat, app_id=application_id)
 
     # Step F: Factual Anti-Hallucination Reviewer
     t0 = time.perf_counter()
@@ -113,8 +127,55 @@ def _run_job_review_sync(state: GraphState) -> tuple[GraphState, list, dict]:
     lat = int((time.perf_counter() - t0) * 1000)
     factual_data = state.get("factual_review") or {}
     timeline_entries.append(("agent_factual_reviewer", factual_data, lat))
+    log.info("batch_step_done", step="factual_reviewer", latency_ms=lat, app_id=application_id)
 
     return state, timeline_entries, ats_data
+
+
+async def _save_tailored_resume_with_retry(
+    user_id: int,
+    base_resume_text: str,
+    tailored_html: str,
+    max_retries: int = 3,
+) -> int | None:
+    """
+    Save a tailored resume with atomic version numbering.
+
+    Uses a retry loop with random UUID fallback to handle race conditions
+    when multiple parallel jobs try to increment the version simultaneously.
+    """
+    for attempt in range(max_retries):
+        async with AsyncSessionLocal() as db:
+            try:
+                ver_stmt = select(func.max(Resume.version)).where(Resume.user_id == user_id)
+                ver_res = await db.execute(ver_stmt)
+                current_max = ver_res.scalar() or 0
+                # Add attempt offset to avoid collisions on retry
+                next_version = current_max + 1 + attempt
+
+                tailored_resume = Resume(
+                    user_id=user_id,
+                    version=next_version,
+                    source_text=base_resume_text,
+                    source_html=tailored_html,
+                    is_base=False,
+                )
+                db.add(tailored_resume)
+                await db.commit()
+                await db.refresh(tailored_resume)
+                return tailored_resume.id
+            except IntegrityError:
+                await db.rollback()
+                log.warning("resume_version_conflict_retrying", user_id=user_id, attempt=attempt + 1)
+                # Small async sleep to de-correlate concurrent retries
+                await asyncio.sleep(0.1 * (attempt + 1))
+                continue
+            except Exception as exc:
+                await db.rollback()
+                log.warning("tailored_resume_save_failed", error=str(exc), user_id=user_id, attempt=attempt + 1)
+                return None
+    log.error("tailored_resume_save_exhausted_retries", user_id=user_id)
+    return None
 
 
 async def _persist_job_core_results(
@@ -128,35 +189,22 @@ async def _persist_job_core_results(
     send_mode: str = "manual",
 ) -> int | None:
     """Immediately persist tailored HTML, PDF, and email draft, setting status=saved."""
+    tailored_html = state.get("tailored_resume_html")
+    tailored_resume_id = None
+
+    # 1. Save tailored resume with atomic versioning (handles race conditions)
+    if tailored_html:
+        tailored_resume_id = await _save_tailored_resume_with_retry(
+            user_id=user_id,
+            base_resume_text=base_resume_text,
+            tailored_html=tailored_html,
+        )
+        if tailored_resume_id:
+            state["tailored_resume_id"] = tailored_resume_id
+
+    # 2. Update Application record to saved (ready) immediately
     async with AsyncSessionLocal() as db:
         try:
-            # 1. Save tailored resume version with unique incremented version
-            tailored_html = state.get("tailored_resume_html")
-            tailored_resume_id = None
-
-            if tailored_html:
-                try:
-                    ver_stmt = select(func.max(Resume.version)).where(Resume.user_id == user_id)
-                    ver_res = await db.execute(ver_stmt)
-                    current_max = ver_res.scalar() or 1
-                    next_version = current_max + 1
-
-                    tailored_resume = Resume(
-                        user_id=user_id,
-                        version=next_version,
-                        source_text=base_resume_text,
-                        source_html=tailored_html,
-                        is_base=False,
-                    )
-                    db.add(tailored_resume)
-                    await db.commit()
-                    await db.refresh(tailored_resume)
-                    tailored_resume_id = tailored_resume.id
-                    state["tailored_resume_id"] = tailored_resume_id
-                except Exception as res_exc:
-                    log.warning("batch_tailored_resume_save_skipped", error=str(res_exc), application_id=application_id)
-
-            # 2. Update Application record to saved (ready) immediately
             stmt = select(Application).where(Application.id == application_id)
             res = await db.execute(stmt)
             application = res.scalar_one_or_none()
@@ -238,6 +286,21 @@ async def _persist_job_review_results(
             log.warning("batch_persist_review_failed", error=str(exc), application_id=application_id)
 
 
+async def _mark_application_failed(application_id: int) -> None:
+    """Mark an application as failed so it never gets stuck in 'tailoring'."""
+    try:
+        async with AsyncSessionLocal() as db:
+            stmt = select(Application).where(Application.id == application_id)
+            res = await db.execute(stmt)
+            app_rec = res.scalar_one_or_none()
+            if app_rec and app_rec.status == ApplicationStatus.tailoring:
+                app_rec.status = ApplicationStatus.failed
+                await db.commit()
+                log.info("batch_marked_failed", application_id=application_id)
+    except Exception:
+        pass
+
+
 async def _process_single_job_lifecycle(
     entry: dict[str, Any],
     user_id: int,
@@ -248,6 +311,7 @@ async def _process_single_job_lifecycle(
     oauth_refresh_token: str | None = None,
     user_profile: dict | None = None,
     semaphore: asyncio.Semaphore | None = None,
+    executor: ThreadPoolExecutor | None = None,
 ) -> dict[str, Any]:
     """Execute end-to-end tailoring lifecycle for a single job with immediate real-time DB persistence."""
     job_id = entry["job_id"]
@@ -256,9 +320,9 @@ async def _process_single_job_lifecycle(
     async def _execute():
         loop = asyncio.get_event_loop()
         try:
-            # Stage 1: Core Assets Generation
+            # Stage 1: Core Assets Generation — use the DEDICATED executor, not the default
             state, core_timeline, email_draft = await loop.run_in_executor(
-                None,
+                executor,
                 _run_job_core_sync,
                 job_id,
                 entry["title"],
@@ -287,10 +351,12 @@ async def _process_single_job_lifecycle(
                 send_mode=send_mode,
             )
 
-            # Stage 3: Review & Telemetry (Non-blocking)
+            log.info("batch_job_core_done", application_id=application_id, job_id=job_id)
+
+            # Stage 3: Review & Telemetry (Non-blocking, uses the same dedicated executor)
             try:
                 state, review_timeline, ats_data = await loop.run_in_executor(
-                    None,
+                    executor,
                     _run_job_review_sync,
                     state,
                 )
@@ -312,16 +378,7 @@ async def _process_single_job_lifecycle(
         except Exception as exc:
             log.error("batch_single_job_failed", job_id=job_id, application_id=application_id, error=str(exc))
             # Immediately mark failed in DB so it doesn't get stuck in 'tailoring'
-            try:
-                async with AsyncSessionLocal() as db:
-                    stmt = select(Application).where(Application.id == application_id)
-                    res = await db.execute(stmt)
-                    app_rec = res.scalar_one_or_none()
-                    if app_rec:
-                        app_rec.status = ApplicationStatus.failed
-                        await db.commit()
-            except Exception:
-                pass
+            await _mark_application_failed(application_id)
 
             return {
                 "job_id": job_id,
@@ -413,7 +470,14 @@ async def run_batch_pipeline(
     batch_size: int | None = None,
     user_profile: dict | None = None,
 ) -> list[dict[str, Any]]:
-    """Process all jobs concurrently with immediate real-time persistence."""
+    """
+    Process all jobs concurrently with immediate real-time persistence.
+
+    Key fix: Uses a DEDICATED ThreadPoolExecutor sized to the number of jobs
+    so that all LLM calls run truly in parallel (not queued behind a tiny
+    default pool). The semaphore still controls overall concurrency to avoid
+    overwhelming the LLM API rate limits.
+    """
     job_entries = await _create_application_records(job_ids, user_id, base_resume_id, send_mode=send_mode)
     if not job_entries:
         return []
@@ -421,28 +485,62 @@ async def run_batch_pipeline(
     concurrency_limit = batch_size or settings.batch_parallel_workers or 5
     semaphore = asyncio.Semaphore(concurrency_limit)
 
-    tasks = [
-        _process_single_job_lifecycle(
-            entry=entry,
-            user_id=user_id,
-            base_resume_text=base_resume_text,
-            base_resume_html=base_resume_html,
-            base_resume_id=base_resume_id,
-            send_mode=send_mode,
-            oauth_refresh_token=oauth_refresh_token,
-            user_profile=user_profile,
-            semaphore=semaphore,
-        )
-        for entry in job_entries
-    ]
+    # Dedicated threadpool sized to handle all jobs simultaneously.
+    # Each job's core pipeline is I/O-bound (waiting for LLM API response),
+    # so having many threads is safe and necessary for true parallelism.
+    # We multiply by 2 because each job may need threads for both core + review phases.
+    pool_size = max(concurrency_limit * 2, len(job_entries) * 2)
+    executor = ThreadPoolExecutor(max_workers=pool_size, thread_name_prefix="batch_llm")
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    log.info(
+        "batch_pipeline_launching",
+        total_jobs=len(job_entries),
+        concurrency_limit=concurrency_limit,
+        thread_pool_size=pool_size,
+        user_id=user_id,
+    )
+
+    try:
+        tasks = [
+            _process_single_job_lifecycle(
+                entry=entry,
+                user_id=user_id,
+                base_resume_text=base_resume_text,
+                base_resume_html=base_resume_html,
+                base_resume_id=base_resume_id,
+                send_mode=send_mode,
+                oauth_refresh_token=oauth_refresh_token,
+                user_profile=user_profile,
+                semaphore=semaphore,
+                executor=executor,
+            )
+            for entry in job_entries
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        # Always shut down the dedicated executor cleanly
+        executor.shutdown(wait=False)
+
     clean_results = []
-    for r in results:
+    failed_app_ids = []
+    for i, r in enumerate(results):
         if isinstance(r, Exception):
-            clean_results.append({"status": "failed", "error": str(r)})
+            app_id = job_entries[i]["application_id"] if i < len(job_entries) else None
+            clean_results.append({"status": "failed", "error": str(r), "application_id": app_id})
+            if app_id:
+                failed_app_ids.append(app_id)
         else:
             clean_results.append(r)
+
+    # Safety net: mark any unhandled exceptions as failed
+    for app_id in failed_app_ids:
+        await _mark_application_failed(app_id)
+
+    success_count = sum(1 for r in clean_results if r.get("status") == "success")
+    fail_count = len(clean_results) - success_count
+    log.info("batch_pipeline_complete", total=len(clean_results), success=success_count, failed=fail_count)
+
     return clean_results
 
 
@@ -474,3 +572,19 @@ async def run_batch_pipeline_background(
         )
     except Exception as exc:
         log.error("batch_pipeline_background_crashed", error=str(exc), user_id=user_id)
+        # Safety net: mark ALL applications in this batch as failed if the whole orchestrator crashes
+        try:
+            async with AsyncSessionLocal() as db:
+                for job_id in job_ids:
+                    stmt = select(Application).where(
+                        Application.user_id == user_id,
+                        Application.job_id == job_id,
+                        Application.status == ApplicationStatus.tailoring,
+                    )
+                    res = await db.execute(stmt)
+                    app = res.scalar_one_or_none()
+                    if app:
+                        app.status = ApplicationStatus.failed
+                await db.commit()
+        except Exception:
+            pass

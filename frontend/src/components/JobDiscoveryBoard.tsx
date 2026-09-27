@@ -4,7 +4,7 @@ import { jobsApi, applicationsApi } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { JobDetailsModal } from './JobDetailsModal';
 import { TailorNoticeModal } from './TailorNoticeModal';
-import { BatchUnavailableModal } from './BatchUnavailableModal';
+
 import {
   Briefcase,
   Compass,
@@ -110,11 +110,11 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   const [isDiscovering, setIsDiscovering] = useState<boolean>(false);
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [inspectingJob, setInspectingJob] = useState<Job | null>(null);
-  const [isBatchRunning] = useState<boolean>(false);
+  const [isBatchRunning, setIsBatchRunning] = useState<boolean>(false);
   const [runningJobId, setRunningJobId] = useState<number | null>(null);
   const [hasSessionSnapshot, setHasSessionSnapshot] = useState<boolean>(false);
   const [showTailorNotice, setShowTailorNotice] = useState<boolean>(false);
-  const [showBatchUnavailableModal, setShowBatchUnavailableModal] = useState<boolean>(false);
+
   const selectedCountriesRef = useRef(selectedCountries);
 
   const preferredRoles = user?.preferred_roles?.slice(0, 3) ?? [];
@@ -293,10 +293,33 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     void handleLoadJobs();
   }, [handleLoadJobs, hydrateFromCache, latestOnly, user?.id, user?.preferred_countries]);
 
-  const handleBatchTailor = () => {
-    if (selectedJobIds.length === 0) return;
-    // Show maintenance notice popup without calling backend or removing jobs
-    setShowBatchUnavailableModal(true);
+  const handleBatchTailor = async () => {
+    if (selectedJobIds.length === 0 || !activeResume) return;
+    try {
+      setIsBatchRunning(true);
+      setShowTailorNotice(true);
+      const res = await applicationsApi.runBatch(selectedJobIds, activeResume.id, user?.id);
+
+      // Remove selected jobs from the board so they only appear in Applications
+      const batchedIds = new Set(selectedJobIds);
+      setJobs((prev) => {
+        const next = prev.filter((j) => !batchedIds.has(j.id));
+        setHasSessionSnapshot(true);
+        persistCache(next, discoveryStats, selectedCountries);
+        return next;
+      });
+      setSelectedJobIds([]);
+
+      // Navigate to the applications tab (first application launched)
+      if (res.job_ids?.length > 0) {
+        // Signal that batch has started — parent can switch tabs
+        onApplicationStarted(-1);
+      }
+    } catch (err) {
+      console.error('Batch tailoring failed:', err);
+    } finally {
+      setIsBatchRunning(false);
+    }
   };
 
   const handleCardClick = (job: Job) => {
@@ -333,10 +356,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   return (
     <section className="relative space-y-6 pb-20">
       <TailorNoticeModal open={showTailorNotice} onClose={() => setShowTailorNotice(false)} />
-      <BatchUnavailableModal
-        open={showBatchUnavailableModal}
-        onClose={() => setShowBatchUnavailableModal(false)}
-      />
+
       <div className="industrial-panel p-5 sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-4">

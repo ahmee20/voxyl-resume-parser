@@ -213,12 +213,19 @@ const DashboardContent: React.FC = () => {
   }
 
   const handleApplicationStarted = (appId: number | null | undefined) => {
-    if (typeof appId !== 'number' || !Number.isFinite(appId) || appId <= 0) {
+    if (typeof appId !== 'number' || !Number.isFinite(appId)) {
+      return;
+    }
+    // Batch tailoring passes -1 as a sentinel: switch to applications tab + refresh
+    if (appId <= 0) {
+      setActiveTab('applications');
+      handleRefreshApplications();
       return;
     }
     setApplicationIds((prev) => [appId, ...prev.filter((id) => id !== appId)]);
     setSelectedApplicationId(appId);
   };
+
 
   const handleRefreshApplications = () => {
     setApplicationsRefreshToken((current) => current + 1);

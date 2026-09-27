@@ -55,6 +55,7 @@ class JobApplicationSummary(BaseModel):
     ats_score: Optional[int] = None
     gap_analysis: Optional[str] = None
     approval_attempts: int = 1
+    created_at: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -93,6 +94,8 @@ def _job_to_response(job: Job, application_data: dict[str, Any] | None = None) -
             or application_data.get("application_rendered_pdf_url")
             or application_data.get("application_email_draft")
         )
+        created_at_raw = application_data.get("application_created_at")
+        created_at_str = created_at_raw.isoformat() if hasattr(created_at_raw, "isoformat") else str(created_at_raw) if created_at_raw else None
         latest_app_summary = JobApplicationSummary(
             id=application_data["application_id"],
             status=_effective_application_status(application_data.get("application_status"), has_assets),
@@ -104,6 +107,7 @@ def _job_to_response(job: Job, application_data: dict[str, Any] | None = None) -
             ats_score=application_data.get("application_ats_score"),
             gap_analysis=application_data.get("application_gap_analysis"),
             approval_attempts=application_data.get("application_approval_attempts") or 1,
+            created_at=created_at_str,
         )
 
     return JobResponse(
@@ -188,6 +192,7 @@ async def list_jobs(
             Application.gap_analysis.label("application_gap_analysis"),
             Application.approval_attempts.label("application_approval_attempts"),
             Application.drive_folder_url.label("application_drive_folder_url"),
+            Application.created_at.label("application_created_at"),
         )
         .join(latest_app_subquery, Application.id == latest_app_subquery.c.max_application_id)
     )
@@ -221,6 +226,16 @@ async def list_jobs(
         if tailored is False and summary and _is_tailored_summary(summary):
             continue
         response_items.append(_job_to_response(job, summary))
+
+    # When listing applications page (tailored=True), sort by latest application (newest first)
+    if tailored is True:
+        response_items.sort(
+            key=lambda item: (
+                item.application.created_at or "" if item.application else "",
+                item.application.id if item.application else 0,
+            ),
+            reverse=True,
+        )
 
     return response_items
 

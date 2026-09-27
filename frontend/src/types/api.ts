@@ -44,6 +44,7 @@ export interface JobApplicationSummary {
   ats_score?: number | null;
   gap_analysis?: string | null;
   approval_attempts?: number;
+  created_at?: string | null;
 }
 
 export interface Job {

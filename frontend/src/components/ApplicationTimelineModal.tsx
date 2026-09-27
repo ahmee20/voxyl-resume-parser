@@ -16,6 +16,7 @@ import {
   Building2,
   ExternalLink,
   AlertCircle,
+  Clock,
 } from 'lucide-react';
 
 interface ApplicationTimelineModalProps {
@@ -213,6 +214,20 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
               <span className="border border-emerald-700 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono uppercase text-emerald-700">
                 App #{resolvedApplicationId}
               </span>
+              {detail?.created_at ? (
+                <span
+                  className="inline-flex items-center gap-1 border border-border bg-background px-2.5 py-1 text-[11px] font-mono text-slate-500"
+                  title={new Date(detail.created_at).toLocaleString()}
+                >
+                  <Clock className="h-3 w-3 text-slate-400" />
+                  Added {new Date(detail.created_at).toLocaleDateString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })}
+                </span>
+              ) : null}
               {detail?.status === 'failed' ? (
                 <span className="inline-flex items-center gap-1 border border-rose-500/40 bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
                   <AlertCircle className="h-3 w-3" />

@@ -646,6 +646,8 @@ async def get_application_details(
             Application.gap_analysis.label("gap_analysis"),
             Application.email_draft.label("email_draft"),
             Application.approval_attempts.label("approval_attempts"),
+            Application.created_at.label("created_at"),
+            Application.updated_at.label("updated_at"),
             Job.title.label("job_title"),
             Job.company.label("job_company"),
             Job.url.label("job_url"),
@@ -727,5 +729,7 @@ async def get_application_details(
         "email_draft": app_record["email_draft"],
         "rendered_pdf_url": app_record["rendered_pdf_url"],
         "approval_attempts": app_record["approval_attempts"],
+        "created_at": app_record["created_at"].isoformat() if hasattr(app_record.get("created_at"), "isoformat") else str(app_record.get("created_at")) if app_record.get("created_at") else None,
+        "updated_at": app_record["updated_at"].isoformat() if hasattr(app_record.get("updated_at"), "isoformat") else str(app_record.get("updated_at")) if app_record.get("updated_at") else None,
         "timeline": formatted_timeline,
     }

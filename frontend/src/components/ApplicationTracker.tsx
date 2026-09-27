@@ -1,7 +1,45 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, ChevronRight, CheckCircle2, FileText, Layers, MapPin, Search } from 'lucide-react';
+import { Building2, ChevronRight, CheckCircle2, Clock, FileText, Layers, MapPin, Search } from 'lucide-react';
 import type { Job } from '../types/api';
 import { jobsApi } from '../services/api';
+
+const sortApplicationsByLatest = (list: Job[]): Job[] => {
+  return [...list].sort((a, b) => {
+    const timeA = a.application?.created_at ? new Date(a.application.created_at).getTime() : 0;
+    const timeB = b.application?.created_at ? new Date(b.application.created_at).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return (b.application?.id || 0) - (a.application?.id || 0);
+  });
+};
+
+const formatAddedTime = (createdAt?: string | null): string => {
+  if (!createdAt) return 'Recently';
+  try {
+    const date = new Date(createdAt);
+    if (isNaN(date.getTime())) return 'Recently';
+
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return 'Recently';
+  }
+};
 
 interface ApplicationTrackerProps {
   applicationIds: number[];
@@ -32,7 +70,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
       if (!raw) return null;
       const parsed = JSON.parse(raw) as ApplicationCacheSnapshot;
       if (Array.isArray(parsed.jobs)) {
-        return parsed.jobs;
+        return sortApplicationsByLatest(parsed.jobs);
       }
     } catch {
       // ignore
@@ -75,7 +113,7 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
     try {
       if (!silent) setIsLoading(true);
       const data = await jobsApi.listJobs(undefined, 100, 0, false, userId, true);
-      const tailoredOnly = data.filter((job) => Boolean(job.application));
+      const tailoredOnly = sortApplicationsByLatest(data.filter((job) => Boolean(job.application)));
       setJobs(tailoredOnly);
       persistCache(tailoredOnly);
     } catch {
@@ -196,12 +234,21 @@ export const ApplicationTracker: React.FC<ApplicationTrackerProps> = ({
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                        <span className="border border-emerald-700 bg-emerald-50 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase text-emerald-700">
+                      <span className="border border-emerald-700 bg-emerald-50 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase text-emerald-700">
                         Tailored
                       </span>
                       {app?.ats_score != null ? (
                         <span className="border border-border bg-background px-2.5 py-1 text-[10px] font-mono text-slate-500">
                           ATS {app.ats_score}%
+                        </span>
+                      ) : null}
+                      {app?.created_at ? (
+                        <span
+                          className="inline-flex items-center gap-1 border border-border bg-background px-2.5 py-1 text-[10px] font-mono text-slate-500"
+                          title={new Date(app.created_at).toLocaleString()}
+                        >
+                          <Clock className="h-3 w-3 text-slate-400" />
+                          Added {formatAddedTime(app.created_at)}
                         </span>
                       ) : null}
                     </div>

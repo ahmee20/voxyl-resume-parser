@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Building2,
   ExternalLink,
+  AlertCircle,
 } from 'lucide-react';
 
 interface ApplicationTimelineModalProps {
@@ -212,7 +213,12 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
               <span className="border border-emerald-700 bg-emerald-50 px-2.5 py-1 text-[11px] font-mono uppercase text-emerald-700">
                 App #{resolvedApplicationId}
               </span>
-              {detail?.status === 'tailoring' && !hasTailoredAssets(detail) ? (
+              {detail?.status === 'failed' ? (
+                <span className="inline-flex items-center gap-1 border border-rose-500/40 bg-rose-50 px-2.5 py-1 text-[10px] font-semibold text-rose-700">
+                  <AlertCircle className="h-3 w-3" />
+                  Failed — Reapply in Jobs
+                </span>
+              ) : detail?.status === 'tailoring' && !hasTailoredAssets(detail) ? (
                 <span className="inline-flex items-center gap-1 border border-amber-700 bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Tailoring active
@@ -261,6 +267,24 @@ export const ApplicationTimelineModal: React.FC<ApplicationTimelineModalProps> =
             </button>
           </div>
         </div>
+
+        {detail?.status === 'failed' && (
+          <div className="mx-6 mt-3 flex items-center justify-between border border-rose-500/30 bg-rose-50 p-3 text-xs text-rose-800">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+              <span>Tailoring encountered an issue. This job is back in your <strong>Jobs</strong> section so you can reapply anytime.</span>
+            </div>
+            <button
+              onClick={() => {
+                onClose();
+                if (onRefreshJobs) onRefreshJobs();
+              }}
+              className="ml-3 shrink-0 border border-rose-600 bg-white px-3 py-1 font-semibold text-rose-700 hover:bg-rose-600 hover:text-white"
+            >
+              Go to Jobs
+            </button>
+          </div>
+        )}
 
         <div className="mx-4 mt-3 grid grid-cols-4 overflow-x-auto border border-primary-600 bg-background text-xs">
           <button

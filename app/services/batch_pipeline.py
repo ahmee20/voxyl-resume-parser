@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.database import AsyncSessionLocal
@@ -132,52 +132,6 @@ def _run_job_review_sync(state: GraphState) -> tuple[GraphState, list, dict]:
     return state, timeline_entries, ats_data
 
 
-async def _save_tailored_resume_with_retry(
-    user_id: int,
-    base_resume_text: str,
-    tailored_html: str,
-    max_retries: int = 3,
-) -> int | None:
-    """
-    Save a tailored resume with atomic version numbering.
-
-    Uses a retry loop with random UUID fallback to handle race conditions
-    when multiple parallel jobs try to increment the version simultaneously.
-    """
-    for attempt in range(max_retries):
-        async with AsyncSessionLocal() as db:
-            try:
-                ver_stmt = select(func.max(Resume.version)).where(Resume.user_id == user_id)
-                ver_res = await db.execute(ver_stmt)
-                current_max = ver_res.scalar() or 0
-                # Add attempt offset to avoid collisions on retry
-                next_version = current_max + 1 + attempt
-
-                tailored_resume = Resume(
-                    user_id=user_id,
-                    version=next_version,
-                    source_text=base_resume_text,
-                    source_html=tailored_html,
-                    is_base=False,
-                )
-                db.add(tailored_resume)
-                await db.commit()
-                await db.refresh(tailored_resume)
-                return tailored_resume.id
-            except IntegrityError:
-                await db.rollback()
-                log.warning("resume_version_conflict_retrying", user_id=user_id, attempt=attempt + 1)
-                # Small async sleep to de-correlate concurrent retries
-                await asyncio.sleep(0.1 * (attempt + 1))
-                continue
-            except Exception as exc:
-                await db.rollback()
-                log.warning("tailored_resume_save_failed", error=str(exc), user_id=user_id, attempt=attempt + 1)
-                return None
-    log.error("tailored_resume_save_exhausted_retries", user_id=user_id)
-    return None
-
-
 async def _persist_job_core_results(
     application_id: int,
     user_id: int,
@@ -188,23 +142,41 @@ async def _persist_job_core_results(
     email_draft_val: str | None,
     send_mode: str = "manual",
 ) -> int | None:
-    """Immediately persist tailored HTML, PDF, and email draft, setting status=saved."""
+    """Immediately persist tailored HTML, PDF, and email draft in a single atomic transaction, setting status=saved."""
     tailored_html = state.get("tailored_resume_html")
     tailored_resume_id = None
 
-    # 1. Save tailored resume with atomic versioning (handles race conditions)
-    if tailored_html:
-        tailored_resume_id = await _save_tailored_resume_with_retry(
-            user_id=user_id,
-            base_resume_text=base_resume_text,
-            tailored_html=tailored_html,
-        )
-        if tailored_resume_id:
-            state["tailored_resume_id"] = tailored_resume_id
-
-    # 2. Update Application record to saved (ready) immediately
     async with AsyncSessionLocal() as db:
         try:
+            # 1. Save tailored resume with atomic SQL in 1 DB round trip (no retries, no sleep delays)
+            if tailored_html:
+                try:
+                    insert_stmt = text("""
+                        INSERT INTO resumes (user_id, version, source_text, source_html, is_base, created_at)
+                        VALUES (
+                            :user_id,
+                            COALESCE((SELECT MAX(r.version) FROM resumes r WHERE r.user_id = :user_id), 0) + 1,
+                            :source_text,
+                            :source_html,
+                            false,
+                            CURRENT_TIMESTAMP
+                        )
+                        RETURNING id
+                    """)
+                    ins_res = await db.execute(
+                        insert_stmt,
+                        {
+                            "user_id": user_id,
+                            "source_text": base_resume_text,
+                            "source_html": tailored_html,
+                        },
+                    )
+                    tailored_resume_id = ins_res.scalar_one()
+                    state["tailored_resume_id"] = tailored_resume_id
+                except Exception as res_err:
+                    log.warning("batch_tailored_resume_save_failed", error=str(res_err), user_id=user_id)
+
+            # 2. Update Application record to saved (ready) in the exact same transaction
             stmt = select(Application).where(Application.id == application_id)
             res = await db.execute(stmt)
             application = res.scalar_one_or_none()
@@ -429,6 +401,12 @@ async def _create_application_records(
             if existing_app:
                 existing_app.status = ApplicationStatus.tailoring
                 existing_app.mode = ApplicationMode.auto if send_mode == "auto" else ApplicationMode.manual
+                existing_app.resume_id = base_resume_id
+                existing_app.tailored_html = None
+                existing_app.rendered_pdf_url = None
+                existing_app.email_draft = None
+                existing_app.gap_analysis = None
+                existing_app.approval_attempts = 0
                 await db.commit()
                 app_id = existing_app.id
             else:

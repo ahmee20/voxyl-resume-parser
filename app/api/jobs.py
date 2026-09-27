@@ -28,6 +28,8 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 
 def _effective_application_status(raw_status: str | None, has_assets: bool) -> str:
+    if raw_status == "failed":
+        return "failed"
     if raw_status == "tailoring" and has_assets:
         return "saved"
     return raw_status or "discovered"
@@ -194,6 +196,9 @@ async def list_jobs(
 
     def _is_tailored_summary(summary: dict[str, Any]) -> bool:
         status = summary.get("application_status") or ""
+        # Failed applications are NOT tailored — they must reappear on the Jobs board so the user can reapply
+        if status == ApplicationStatus.failed.value:
+            return False
         has_assets = bool(
             summary.get("application_tailored_html")
             or summary.get("application_rendered_pdf_url")

@@ -20,7 +20,7 @@ from typing import Any, Optional
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import String, cast, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agent.nodes.analyze_gaps import analyze_gaps_node
@@ -231,22 +231,27 @@ async def _persist_pipeline_results(
             tailored_resume_id = None
             if persist_tailored_resume and tailored_html:
                 try:
-                    ver_stmt = select(func.max(Resume.version)).where(Resume.user_id == user_id)
-                    ver_res = await db.execute(ver_stmt)
-                    current_max = ver_res.scalar() or base_resume_version or 1
-                    next_version = current_max + 1
-
-                    tailored_resume = Resume(
-                        user_id=user_id,
-                        version=next_version,
-                        source_text=base_resume_text,
-                        source_html=tailored_html,
-                        is_base=False,
+                    stmt_ins = text("""
+                        INSERT INTO resumes (user_id, version, source_text, source_html, is_base, created_at)
+                        VALUES (
+                            :user_id,
+                            COALESCE((SELECT MAX(r.version) FROM resumes r WHERE r.user_id = :user_id), 0) + 1,
+                            :source_text,
+                            :source_html,
+                            false,
+                            CURRENT_TIMESTAMP
+                        )
+                        RETURNING id
+                    """)
+                    res_ins = await db.execute(
+                        stmt_ins,
+                        {
+                            "user_id": user_id,
+                            "source_text": base_resume_text,
+                            "source_html": tailored_html,
+                        },
                     )
-                    db.add(tailored_resume)
-                    await db.commit()
-                    await db.refresh(tailored_resume)
-                    tailored_resume_id = tailored_resume.id
+                    tailored_resume_id = res_ins.scalar_one()
                     state["tailored_resume_id"] = tailored_resume_id
                 except Exception as res_exc:
                     log.warning("tailored_resume_save_skipped", error=str(res_exc))
@@ -517,6 +522,12 @@ async def run_single_job_pipeline(
         await db.refresh(application)
     else:
         application.status = ApplicationStatus.tailoring
+        application.resume_id = base_resume.id
+        application.tailored_html = None
+        application.rendered_pdf_url = None
+        application.email_draft = None
+        application.gap_analysis = None
+        application.approval_attempts = 0
         await db.commit()
 
     # 5. Launch the multi-agent tailoring pipeline in background

@@ -122,6 +122,8 @@ async def lifespan(app: FastAPI):
                     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_qualified BOOLEAN DEFAULT TRUE;
                     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_score INTEGER;
                     ALTER TABLE jobs ADD COLUMN IF NOT EXISTS filter_reason TEXT;
+                    UPDATE applications SET status = 'saved' WHERE status = 'tailoring' AND (tailored_html IS NOT NULL OR rendered_pdf_url IS NOT NULL);
+                    UPDATE applications SET status = 'failed' WHERE status = 'tailoring' AND (tailored_html IS NULL AND rendered_pdf_url IS NULL);
                 """))
         log.info("database_connected_and_tables_ready", url=settings.resolved_database_url.split("@")[-1])
     except Exception as exc:

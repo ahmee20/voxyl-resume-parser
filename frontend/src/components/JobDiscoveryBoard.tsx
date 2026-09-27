@@ -30,6 +30,7 @@ interface JobDiscoveryBoardProps {
   suspendAutoRefresh?: boolean;
   hideJobList?: boolean;
   onNavigateToJobs?: () => void;
+  isActive?: boolean;
 }
 
 type DiscoveryStats = {
@@ -67,10 +68,10 @@ const AVAILABLE_COUNTRIES = [
 
 /**
  * Filter untailored jobs: only jobs without an active/completed application.
- * Tailored jobs belong in the Applications section.
+ * Jobs with failed applications reappear here so the user can reapply.
  */
 const filterUntailoredJobs = (jobList: Job[]): Job[] => {
-  return jobList.filter((j) => !j.application);
+  return jobList.filter((j) => !j.application || j.application.status === 'failed');
 };
 
 export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
@@ -83,6 +84,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
   suspendAutoRefresh: _suspendAutoRefresh,
   hideJobList = false,
   onNavigateToJobs,
+  isActive = false,
 }) => {
   const { user } = useAuth();
   const cacheKey = useMemo(
@@ -237,13 +239,15 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     }
   };
 
-  const handleLoadJobs = useCallback(async () => {
+  const handleLoadJobs = useCallback(async (force = false) => {
     if (!user) return;
 
-    const cached = readCache();
-    if (cached) {
-      hydrateFromCache();
-      return;
+    if (!force) {
+      const cached = readCache();
+      if (cached) {
+        hydrateFromCache();
+        return;
+      }
     }
 
     if (latestOnly) {
@@ -271,9 +275,6 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
     }
 
     const hydrated = hydrateFromCache();
-    if (hydrated) {
-      return;
-    }
 
     if (latestOnly) {
       if (user?.preferred_countries?.length) {
@@ -290,8 +291,17 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
       setSelectedCountries(['REMOTE', 'US']);
     }
 
-    void handleLoadJobs();
+    if (!hydrated) {
+      void handleLoadJobs(false);
+    }
   }, [handleLoadJobs, hydrateFromCache, latestOnly, user?.id, user?.preferred_countries]);
+
+  // Re-sync with database when entering the Jobs tab to ensure any failed jobs appear immediately
+  useEffect(() => {
+    if (isActive && !latestOnly && user?.id) {
+      void handleLoadJobs(true);
+    }
+  }, [isActive, latestOnly, user?.id, handleLoadJobs]);
 
   const handleBatchTailor = async () => {
     if (selectedJobIds.length === 0 || !activeResume) return;
@@ -395,7 +405,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
           <div className="flex flex-wrap gap-3 lg:min-w-[240px]">
             {showLoadJobsButton && (
               <button
-                onClick={handleLoadJobs}
+                onClick={() => void handleLoadJobs(true)}
                 disabled={isLoading}
                 className="inline-flex items-center justify-center gap-2 border border-primary-600 bg-surface px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-primary-600 hover:text-white disabled:opacity-50"
                 title="Load job listings"
@@ -547,9 +557,15 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <span className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase text-slate-500">
-                                Untailored
-                              </span>
+                              {job.application?.status === 'failed' ? (
+                                <span className="border border-rose-500/40 bg-rose-50 px-2 py-0.5 font-mono text-[10px] uppercase font-semibold text-rose-700">
+                                  Failed · Reapply
+                                </span>
+                              ) : (
+                                <span className="border border-border px-2 py-0.5 font-mono text-[10px] uppercase text-slate-500">
+                                  Untailored
+                                </span>
+                              )}
 
                               {job.match_score && (
                                 <span className="border border-primary-600 px-2 py-0.5 font-mono text-[10px] font-medium text-primary-600">
@@ -640,7 +656,7 @@ export const JobDiscoveryBoard: React.FC<JobDiscoveryBoardProps> = ({
                             </>
                           ) : (
                             <>
-                              <span>Tailor Now</span>
+                              <span>{job.application?.status === 'failed' ? 'Reapply' : 'Tailor Now'}</span>
                             </>
                           )}
                         </button>

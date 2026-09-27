@@ -282,6 +282,7 @@ const DashboardContent: React.FC = () => {
               onDiscoverySuccess={() => {
                 setShowLatestDashboardJobs(true);
               }}
+              isActive={activeTab === 'jobs'}
             />
           </div>
         )}

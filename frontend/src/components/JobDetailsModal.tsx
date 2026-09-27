@@ -14,6 +14,7 @@ import {
   Layers,
   FileText,
   Percent,
+  AlertCircle,
 } from 'lucide-react';
 
 interface JobDetailsModalProps {
@@ -69,7 +70,12 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
         <div className="flex items-start justify-between border-b border-border px-6 py-5">
           <div className="space-y-2 pr-6">
             <div className="flex flex-wrap items-center gap-2">
-              {isTailored ? (
+              {app?.status === 'failed' ? (
+                <span className="inline-flex items-center gap-1 border border-rose-500/40 bg-rose-50 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-rose-700">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Previous attempt failed · Reapply ready
+                </span>
+              ) : isTailored ? (
                 <span className="inline-flex items-center gap-1 border border-emerald-700 bg-emerald-50 px-2.5 py-1 font-mono text-xs font-semibold uppercase text-emerald-700">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Tailored and ready
@@ -238,7 +244,7 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({
                     Preparing your match...
                   </>
                 ) : (
-                  <>Generate tailored resume and letter</>
+                  <>{app?.status === 'failed' ? 'Reapply and tailor resume' : 'Generate tailored resume and letter'}</>
                 )}
               </button>
             )}
